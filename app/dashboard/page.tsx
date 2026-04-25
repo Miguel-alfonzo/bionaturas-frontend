@@ -45,17 +45,18 @@ function DashboardContent() {
   const handleConfirmarCheckin = async () => {
     setGuardando(true);
     try {
-      // Guardamos el desahogo en motivo_consulta antes de ir a la agenda
+      // 1. Guardamos el desahogo en Supabase
       await supabase
         .from('historias_clinicas')
         .update({ motivo_consulta: comentario })
         .eq('nombre_completo', nombre);
       
-      // Aquí iríamos a la página de la agenda (Módulo 3)
-      alert("Check-in guardado. Pasando a la agenda...");
-      // router.push('/agenda'); 
+      // 2. NAVEGACIÓN REAL: Viajamos a la agenda llevando el nombre
+      router.push(`/agenda?nombre=${nombre}`); 
+      
     } catch (error) {
       console.error("Error al guardar check-in:", error);
+      alert("Hubo un error al conectar. Revisa tu conexión.");
     } finally {
       setGuardando(false);
     }

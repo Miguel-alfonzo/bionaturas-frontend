@@ -1,7 +1,17 @@
+"use client"; // 1. Necesario para usar botones y navegación
 import React from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation'; // 2. El "GPS" de Next.js
 
 export default function Home() {
+  const router = useRouter(); // 3. Inicializamos el navegador
+
+  const handleIngresar = () => {
+    // Aquí podrías validar si el input tiene el número, 
+    // pero por ahora, vamos directo a la siguiente fase
+    router.push('/perfiles'); 
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-md bg-[#FFFFFF] shadow-[0_10px_25px_-5px_rgba(11,93,52,0.05)] rounded-xl p-8 border border-gray-100 flex flex-col items-center">
@@ -37,7 +47,10 @@ export default function Home() {
         </div>
 
         <div className="w-full flex flex-col space-y-4 mb-8">
-          <button className="w-full bg-[#0B5D34] text-white font-semibold py-3.5 rounded-lg hover:bg-[#084b29] transition-all shadow-lg shadow-[#0B5D34]/20 text-lg">
+          <button 
+            onClick={handleIngresar} // 4. Conectamos la acción al botón
+            className="w-full bg-[#0B5D34] text-white font-semibold py-3.5 rounded-lg hover:bg-[#084b29] transition-all shadow-lg shadow-[#0B5D34]/20 text-lg active:scale-[0.98]"
+          >
             Solicitar Acceso
           </button>
           
