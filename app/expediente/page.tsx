@@ -9,7 +9,6 @@ function ExpedienteContent() {
   const searchParams = useSearchParams();
   const nombre = searchParams.get('nombre') || 'Consultante';
   
-  // FASE 1: Extracción del primer nombre para un saludo cálido
   const primerNombre = nombre.split(' ')[0];
 
   const [datos, setDatos] = useState<any>(null);
@@ -72,7 +71,6 @@ function ExpedienteContent() {
     <div className="min-h-screen bg-[#F3F4F6] flex flex-col items-center p-4 md:p-12 pb-32 font-sans relative">
       <div className="w-full max-w-xl space-y-6 animate-in fade-in duration-700">
         
-        {/* HEADER LIMPIO (Sin el nombre completo) */}
         <header className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-4">
             <button onClick={() => router.back()} className="p-3 bg-white rounded-2xl shadow-sm text-gray-400 hover:text-[#0B5D34] transition-all">
@@ -85,7 +83,6 @@ function ExpedienteContent() {
           </div>
         </header>
 
-        {/* PRESENCIA DE VALENTINA (Saludo humanizado) */}
         <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-4 relative overflow-hidden">
           <div className="w-16 h-16 rounded-full overflow-hidden shrink-0 border-2 border-[#0B5D34]/20 shadow-inner">
             <img src="/valentina.jpg" alt="Valentina" className="w-full h-full object-cover" />
@@ -97,12 +94,11 @@ function ExpedienteContent() {
           </div>
         </div>
 
-        {/* TARJETAS DE FECHAS */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center">
             <div className="flex items-center gap-2 text-gray-400 mb-2">
               <Calendar size={16} />
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Última visita</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Última consulta</p>
             </div>
             <p className="text-sm font-bold text-gray-800 capitalize">
               {formatearFecha(datos?.ultima_consulta)}
@@ -113,7 +109,7 @@ function ExpedienteContent() {
             <CalendarClock className="absolute -right-3 -top-3 opacity-10" size={80} />
             <div className="flex items-center gap-2 text-green-200 mb-2 relative z-10">
               <CalendarClock size={16} />
-              <p className="text-[10px] font-black uppercase tracking-widest">Próxima sugerida</p>
+              <p className="text-[10px] font-black uppercase tracking-widest">Próxima consulta</p>
             </div>
             <p className="text-sm font-bold capitalize relative z-10">
               {proximaConsulta}
@@ -121,7 +117,6 @@ function ExpedienteContent() {
           </div>
         </div>
 
-        {/* TARJETA DE PESO */}
         <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between relative overflow-hidden">
           <div>
             <div className="flex items-center gap-2 text-[#0B5D34] mb-1">
@@ -133,7 +128,7 @@ function ExpedienteContent() {
           <Scale className="text-gray-50 opacity-80" size={60} />
         </div>
 
-        {/* SECCIÓN: PROTOCOLO */}
+        {/* SECCIÓN: PROTOCOLO (CORREGIDO LA FUENTE ITALIC POR NORMAL/MEDIUM) */}
         <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100">
           <div className="flex items-center gap-3 mb-6 border-b border-gray-50 pb-4">
             <div className="w-10 h-10 bg-[#0B5D34]/10 text-[#0B5D34] rounded-xl flex items-center justify-center">
@@ -141,15 +136,17 @@ function ExpedienteContent() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-gray-800">Protocolo de salud</h2>
-              <p className="text-xs text-gray-500 font-medium">Récipe y terapias sugeridas</p>
+              <p className="text-xs text-gray-500 font-medium">Apoyo terapéutico</p>
             </div>
           </div>
 
-          <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100 italic text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+          <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
             {datos?.protocolo ? (
-              datos.protocolo
+              <p className="text-sm text-gray-700 leading-relaxed font-medium whitespace-pre-line">
+                {datos.protocolo}
+              </p>
             ) : (
-              <p className="text-gray-400">Aún no se ha cargado un protocolo para este paciente.</p>
+              <p className="text-gray-400 italic text-sm">Aún no se ha cargado un protocolo para este paciente.</p>
             )}
           </div>
         </div>
@@ -160,7 +157,7 @@ function ExpedienteContent() {
             <div className="w-10 h-10 bg-orange-50 text-orange-500 rounded-xl flex items-center justify-center">
               <Utensils size={20} />
             </div>
-            <h2 className="text-lg font-bold text-gray-800">Guía alimentaria</h2>
+            <h2 className="text-lg font-bold text-gray-800">Mi dieta personalizada</h2>
           </div>
           <div className="bg-orange-50/50 p-5 rounded-2xl border border-orange-100/50">
             <p className="text-sm text-gray-700 leading-relaxed font-medium whitespace-pre-line">
@@ -177,7 +174,6 @@ function ExpedienteContent() {
           <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-4">— Dr. Luis Alfonzo Yépez</p>
         </div>
 
-        {/* BOTÓN: HABLAR CON VALENTINA */}
         <div className="fixed bottom-8 left-4 right-4 max-w-xl mx-auto z-40">
           <button 
             onClick={() => alert("Pronto te conectaremos directo al chat de Valentina.")}

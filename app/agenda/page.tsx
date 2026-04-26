@@ -44,16 +44,22 @@ function AgendaContent() {
   const [citaConfirmada, setCitaConfirmada] = useState(false);
   const [guardandoCita, setGuardandoCita] = useState(false);
   const [esNuevo, setEsNuevo] = useState(true);
+  
+  // NUEVO: Estado para saber si estamos reprogramando
+  const [citaAntigua, setCitaAntigua] = useState<string | null>(null);
 
   useEffect(() => {
     const verificarPaciente = async () => {
       const { data } = await supabase
         .from('historias_clinicas')
-        .select('fecha_nacimiento')
+        .select('fecha_nacimiento, proxima_cita')
         .eq('nombre_completo', nombre)
         .maybeSingle();
       
-      if (data && data.fecha_nacimiento) setEsNuevo(false);
+      if (data) {
+        if (data.fecha_nacimiento) setEsNuevo(false);
+        if (data.proxima_cita) setCitaAntigua(data.proxima_cita);
+      }
     };
     verificarPaciente();
   }, [nombre]);
@@ -132,7 +138,16 @@ function AgendaContent() {
   const handleConfirmar = async () => {
     setGuardandoCita(true);
     try {
-      // 1. Agendar en Google Calendar
+      // 1. LÓGICA INVISIBLE DE REPROGRAMACIÓN: Si había cita previa, la borramos de Google Calendar
+      if (citaAntigua) {
+        await fetch('/api/calendar/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre: nombre, fechaTexto: citaAntigua })
+        });
+      }
+
+      // 2. Agendar la nueva cita
       const res = await fetch('/api/calendar/book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -156,7 +171,6 @@ function AgendaContent() {
           .maybeSingle();
 
         if (pacienteExiste) {
-          // AHORA EL CÓDIGO ESCUCHA SI HAY ERROR AL ACTUALIZAR
           const { error: updateError } = await supabase
             .from('historias_clinicas')
             .update({ proxima_cita: fechaParaBaseDeDatos })
@@ -165,10 +179,9 @@ function AgendaContent() {
           if (updateError) {
             alert("Error al guardar en base de datos: " + JSON.stringify(updateError));
             setGuardandoCita(false);
-            return; // Detiene el proceso si hay error
+            return;
           }
         } else {
-          // AHORA EL CÓDIGO ESCUCHA SI HAY ERROR AL INSERTAR
           const { error: insertError } = await supabase
             .from('historias_clinicas')
             .insert({ 
@@ -180,11 +193,11 @@ function AgendaContent() {
           if (insertError) {
             alert("Error al crear paciente: " + JSON.stringify(insertError));
             setGuardandoCita(false);
-            return; // Detiene el proceso si hay error
+            return;
           }
         }
 
-        setCitaConfirmada(true); // Solo confirma si todo salió perfecto
+        setCitaConfirmada(true);
 
       } else {
         const errorData = await res.json();
@@ -219,7 +232,7 @@ function AgendaContent() {
             <p className="text-base leading-relaxed font-medium">
               ¡Hola, <span className="text-[#0B5D34] font-bold">{primerNombre}</span>! Soy Valentina 👋
               <br/><br/>
-              Ya aseguré tu espacio para: <span className="font-bold">{servicio.nombre}</span> el día <span className="font-bold text-[#0B5D34]">{proximosDias[diaIdx!].formatoVzla}</span> a las <span className="font-bold">{formatoAMPM(hora!)}</span>.
+              {citaAntigua ? 'He reprogramado tu cita con éxito. Ahora tu espacio es para:' : 'Ya aseguré tu espacio para:'} <span className="font-bold">{servicio.nombre}</span> el día <span className="font-bold text-[#0B5D34]">{proximosDias[diaIdx!].formatoVzla}</span> a las <span className="font-bold">{formatoAMPM(hora!)}</span>.
             </p>
             <div className="flex items-center gap-2 mt-4 text-sm text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100">
               <Clock size={18} className="text-[#0B5D34] shrink-0" />
@@ -273,7 +286,7 @@ function AgendaContent() {
             <ChevronLeft size={24} />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-[#1F2937]">Agendar cita</h1>
+            <h1 className="text-2xl font-bold text-[#1F2937]">{citaAntigua ? 'Reprogramar cita' : 'Agendar cita'}</h1>
             <p className="text-gray-500 text-sm italic font-medium">Para: {nombre}</p>
           </div>
         </header>
@@ -360,7 +373,7 @@ function AgendaContent() {
               disabled={guardandoCita}
               className="w-full py-6 bg-[#0B5D34] text-white font-black rounded-[2rem] shadow-2xl shadow-[#0B5D34]/40 hover:bg-[#084b29] hover:-translate-y-1 active:scale-95 transition-all flex items-center justify-center gap-4 text-lg tracking-widest disabled:opacity-50"
             >
-              {guardandoCita ? 'Sincronizando Agenda...' : `CONFIRMAR ${servicio.nombre.toUpperCase()}`}
+              {guardandoCita ? 'Sincronizando...' : citaAntigua ? 'CONFIRMAR REPROGRAMACIÓN' : `CONFIRMAR ${servicio.nombre.toUpperCase()}`}
               {!guardandoCita && <CheckCircle2 size={24} />}
             </button>
           </div>
