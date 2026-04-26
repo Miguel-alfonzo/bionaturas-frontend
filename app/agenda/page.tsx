@@ -2,7 +2,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { ChevronLeft, Clock, ArrowRight, ChevronDown, Loader2, HeartHandshake, CheckCircle2, Sparkles, UserCheck, AlertCircle } from 'lucide-react';
+import { ChevronLeft, Clock, ArrowRight, ChevronDown, Loader2, HeartHandshake, CheckCircle2, Globe, UserCheck, AlertCircle } from 'lucide-react';
 
 const SERVICIOS = [
   { id: 'presencial', nombre: 'Consulta Presencial', duracion: 20, icon: '🩺' },
@@ -32,7 +32,6 @@ function AgendaContent() {
   const searchParams = useSearchParams();
   const nombre = searchParams.get('nombre') || 'Consultante';
   
-  // EXTRAER PRIMER NOMBRE PARA SALUDO HUMANIZADO
   const primerNombre = nombre.split(' ')[0];
 
   const [servicio, setServicio] = useState<any>(null);
@@ -68,13 +67,12 @@ function AgendaContent() {
         const month = String(fechaActual.getMonth() + 1).padStart(2, '0');
         const day = String(fechaActual.getDate()).padStart(2, '0');
         
-        // FASE 2: NORMALIZACIÓN DE FECHA VENEZOLANA (DD/MM/AAAA)
         const fechaVenezolana = `${day}/${month}/${year}`;
 
         dias.push({
           label: fechaActual.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' }),
-          full: `${year}-${month}-${day}`, // Oculto para Google Calendar
-          formatoVzla: fechaVenezolana // Visible para el usuario y Supabase
+          full: `${year}-${month}-${day}`, 
+          formatoVzla: fechaVenezolana 
         });
       }
       fechaActual.setDate(fechaActual.getDate() + 1);
@@ -134,6 +132,7 @@ function AgendaContent() {
   const handleConfirmar = async () => {
     setGuardandoCita(true);
     try {
+      // 1. Agendar en Google Calendar
       const res = await fetch('/api/calendar/book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -148,7 +147,6 @@ function AgendaContent() {
 
       if (res.ok) {
         const horaAMPM = formatoAMPM(hora!);
-        // FASE 2 APLICADA: Guardamos en Supabase con el formato estricto DD/MM/AAAA
         const fechaParaBaseDeDatos = `${proximosDias[diaIdx!].formatoVzla} a las ${horaAMPM}`;
         
         const { data: pacienteExiste } = await supabase
@@ -158,21 +156,35 @@ function AgendaContent() {
           .maybeSingle();
 
         if (pacienteExiste) {
-          await supabase
+          // AHORA EL CÓDIGO ESCUCHA SI HAY ERROR AL ACTUALIZAR
+          const { error: updateError } = await supabase
             .from('historias_clinicas')
             .update({ proxima_cita: fechaParaBaseDeDatos })
             .eq('nombre_completo', nombre);
+            
+          if (updateError) {
+            alert("Error al guardar en base de datos: " + JSON.stringify(updateError));
+            setGuardandoCita(false);
+            return; // Detiene el proceso si hay error
+          }
         } else {
-          await supabase
+          // AHORA EL CÓDIGO ESCUCHA SI HAY ERROR AL INSERTAR
+          const { error: insertError } = await supabase
             .from('historias_clinicas')
             .insert({ 
               nombre_completo: nombre, 
               proxima_cita: fechaParaBaseDeDatos,
               enfoque_actual: 'Evaluación Inicial de Bienestar'
             });
+            
+          if (insertError) {
+            alert("Error al crear paciente: " + JSON.stringify(insertError));
+            setGuardandoCita(false);
+            return; // Detiene el proceso si hay error
+          }
         }
 
-        setCitaConfirmada(true);
+        setCitaConfirmada(true); // Solo confirma si todo salió perfecto
 
       } else {
         const errorData = await res.json();
@@ -205,7 +217,6 @@ function AgendaContent() {
         <div className="bg-white text-[#1F2937] p-8 rounded-[2rem] rounded-tl-sm shadow-2xl max-w-sm w-full relative">
           <div className="mb-6">
             <p className="text-base leading-relaxed font-medium">
-              {/* SALUDO HUMANIZADO Y FECHA NORMALIZADA */}
               ¡Hola, <span className="text-[#0B5D34] font-bold">{primerNombre}</span>! Soy Valentina 👋
               <br/><br/>
               Ya aseguré tu espacio para: <span className="font-bold">{servicio.nombre}</span> el día <span className="font-bold text-[#0B5D34]">{proximosDias[diaIdx!].formatoVzla}</span> a las <span className="font-bold">{formatoAMPM(hora!)}</span>.
@@ -314,10 +325,16 @@ function AgendaContent() {
 
         <div className={`transition-all duration-700 ${diaIdx !== null ? 'opacity-100 translate-y-0 block' : 'opacity-0 translate-y-8 hidden'}`}>
           <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-gray-100 relative overflow-hidden min-h-[200px]">
-            <div className="flex justify-between items-center mb-8 ml-2">
+            <div className="flex justify-between items-center mb-6 ml-2">
               <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em]">Horarios disponibles</p>
               {cargandoHoras && <Loader2 size={16} className="text-[#0B5D34] animate-spin" />}
             </div>
+
+            <div className="bg-blue-50/80 text-blue-700 p-3 rounded-2xl flex items-center justify-center gap-2 mb-8 border border-blue-100/50">
+               <Globe size={16} className="opacity-80" />
+               <p className="text-[10px] font-bold uppercase tracking-widest">Horarios en hora de Venezuela (UTC-4)</p>
+            </div>
+
             <div className={`space-y-8 relative z-10 transition-opacity duration-300 ${cargandoHoras ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
               {['mañana', 'tarde'].map((turno) => (
                 <div key={turno}>
