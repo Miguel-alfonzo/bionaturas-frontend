@@ -37,6 +37,8 @@ const formatoAMPM = (hora24: string) => {
 function AgendaContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  
+  const telefonoURL = searchParams.get('telefono') || '';
   const nombre = searchParams.get('nombre') || 'Consultante';
   const primerNombre = nombre.split(' ')[0];
 
@@ -52,18 +54,23 @@ function AgendaContent() {
   const [guardandoCita, setGuardandoCita] = useState(false);
   const [esNuevo, setEsNuevo] = useState(true);
   const [citaAntigua, setCitaAntigua] = useState<string | null>(null);
+  
+  // EL CAZAFANTASMAS: Estado para guardar el teléfono real desde la base de datos
+  const [telefonoPaciente, setTelefonoPaciente] = useState<string>('');
 
   useEffect(() => {
     const verificarPaciente = async () => {
       const { data } = await supabase
         .from('historias_clinicas')
-        .select('fecha_nacimiento, proxima_cita')
+        // Buscamos también el teléfono real
+        .select('fecha_nacimiento, proxima_cita, telefono')
         .eq('nombre_completo', nombre)
         .maybeSingle();
       
       if (data) {
         if (data.fecha_nacimiento) setEsNuevo(false);
         if (data.proxima_cita) setCitaAntigua(data.proxima_cita);
+        if (data.telefono) setTelefonoPaciente(data.telefono); // Guardamos el teléfono
       }
     };
     verificarPaciente();
@@ -225,7 +232,10 @@ function AgendaContent() {
     if (citaConfirmada) window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [citaConfirmada]);
 
+  // Pantalla de Confirmación de Cita
   if (citaConfirmada) {
+    const telefonoSeguro = telefonoPaciente || telefonoURL; // Usamos el teléfono de la DB, o el de la URL si existe
+
     return (
       <div className="min-h-screen bg-[#0B5D34] flex flex-col items-center justify-center p-6 font-sans text-white animate-in zoom-in-95 duration-700">
         <div className="relative mb-6">
@@ -257,7 +267,7 @@ function AgendaContent() {
                   Para evaluar tu caso correctamente, necesito que llenes tu ficha clínica ahora mismo.
                 </p>
                 <button 
-                  onClick={() => router.push(`/ficha?nombre=${nombre}`)}
+                  onClick={() => router.push(`/ficha?nombre=${nombre}&telefono=${telefonoSeguro}`)}
                   className="w-full py-4 bg-[#0B5D34] text-white font-bold rounded-2xl shadow-lg shadow-[#0B5D34]/30 hover:-translate-y-1 active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
                   Completar ficha de seguimiento <ArrowRight size={18} />
@@ -269,7 +279,7 @@ function AgendaContent() {
                   Tus datos clínicos ya están guardados en el sistema. ¡Nos vemos pronto!
                 </p>
                 <button 
-                  onClick={() => router.push(`/perfiles?telefono=${searchParams.get('telefono') || ''}`)}
+                  onClick={() => router.push(`/perfiles?telefono=${telefonoSeguro}`)}
                   className="w-full py-4 bg-gray-100 text-[#1F2937] font-bold rounded-2xl hover:bg-gray-200 active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
                   Volver a mis perfiles <UserCheck size={18} />
@@ -293,12 +303,11 @@ function AgendaContent() {
           </button>
           <div>
             <h1 className="text-2xl font-bold text-[#1F2937]">{citaAntigua ? 'Reprogramar cita' : 'Agendar cita'}</h1>
-            {/* CORRECCIÓN: Fuente sans-serif unificada */}
             <p className="font-sans text-gray-500 text-sm italic font-medium">Para: {nombre}</p>
           </div>
         </header>
 
-        {/* PASO 1: ÁNIMO (Diseño Premium con cabecera bg-gray-50 y sin números) */}
+        {/* PASO 1: ÁNIMO */}
         <div className="bg-white rounded-[2.5rem] shadow-sm border border-gray-50 overflow-hidden animate-in slide-in-from-bottom-4">
           <div className="bg-gray-50 p-6 border-b border-gray-100">
             <h2 className="font-bold text-[#1F2937]">¿Cómo te sientes física y emocionalmente?</h2>
@@ -353,22 +362,31 @@ function AgendaContent() {
           </div>
         </div>
 
-        {/* PASO 2: SERVICIO (Etiqueta bg-green-50, sin números y intuitivo) */}
+        {/* PASO 2: SERVICIO */}
         <div className={`transition-all duration-700 ${estadosSeleccionados.length > 0 ? 'opacity-100 translate-y-0 block' : 'opacity-0 translate-y-8 hidden'}`}>
-          <div className="relative z-30">
-            <button onClick={() => setIsServiceOpen(!isServiceOpen)} className={`w-full p-5 rounded-[2rem] shadow-sm border flex items-center justify-between transition-all active:scale-[0.98] ${!servicio ? 'bg-[#0B5D34] text-white border-[#0B5D34] shadow-lg shadow-[#0B5D34]/20 animate-pulse-slow' : 'bg-white border-gray-100 hover:border-gray-200'}`}>
+          <div className="relative z-30" id="contenedor-servicios">
+            <button 
+              onClick={() => {
+                setIsServiceOpen(!isServiceOpen);
+                if (!isServiceOpen) {
+                  setTimeout(() => {
+                    document.getElementById('contenedor-servicios')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 150);
+                }
+              }} 
+              className={`w-full p-5 rounded-[2rem] shadow-sm border flex items-center justify-between transition-all active:scale-[0.98] ${!servicio ? 'bg-[#0B5D34] text-white border-[#0B5D34] shadow-lg shadow-[#0B5D34]/20 animate-pulse-slow' : 'bg-white border-gray-100 hover:border-gray-200'}`}
+            >
               <div className="flex items-center gap-4">
                 {servicio ? (
                   <>
                     <span className="text-2xl">{servicio.icon}</span>
                     <div className="text-left">
-                      {/* CORRECCIÓN: Etiqueta verde premium bg-[#0B5D34]/10 */}
                       <p className="inline-block text-[9px] font-black text-[#0B5D34] uppercase tracking-widest bg-[#0B5D34]/10 px-2 py-0.5 rounded-full mb-1">Servicio elegido</p>
                       <p className="text-gray-800 font-bold text-sm">{servicio.nombre}</p>
                     </div>
                   </>
                 ) : (
-                  <><div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-white"><HeartHandshake size={20} /></div><div className="text-left"><p className="text-white font-bold text-xs md:text-sm">Elige el servicio para tu cita...</p></div></>
+                  <><div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-white"><HeartHandshake size={20} /></div><div className="text-left"><p className="text-white font-bold text-base md:text-lg tracking-wide">Elige el servicio para tu cita...</p></div></>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -385,9 +403,10 @@ function AgendaContent() {
                     setIsServiceOpen(false); 
                     setDiaIdx(null);
                     setHora(null);
-                  }} className={`p-5 hover:bg-gray-50 cursor-pointer flex items-center justify-between border-b border-gray-50 last:border-0 ${servicio?.id === s.id ? 'bg-[#0B5D34]/5' : ''}`}>
-                    <div className="flex items-center gap-4"><span className="text-xl">{s.icon}</span><span className={`font-bold text-sm ${servicio?.id === s.id ? 'text-[#0B5D34]' : 'text-gray-600'}`}>{s.nombre}</span></div>
-                    <span className="text-[10px] font-black text-gray-300 uppercase">{s.duracion} min</span>
+                  }} 
+                    className={`p-5 hover:bg-gray-50 cursor-pointer flex items-center justify-between border-b border-gray-50 last:border-0 ${servicio?.id === s.id ? 'bg-[#0B5D34] text-white shadow-inner' : ''}`}>
+                    <div className="flex items-center gap-4"><span className="text-xl">{s.icon}</span><span className={`font-bold text-sm ${servicio?.id === s.id ? 'text-white' : 'text-gray-600'}`}>{s.nombre}</span></div>
+                    <span className={`text-[10px] font-black uppercase ${servicio?.id === s.id ? 'text-green-100' : 'text-gray-300'}`}>{s.duracion} min</span>
                   </div>
                 ))}
               </div>
@@ -401,7 +420,12 @@ function AgendaContent() {
             <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-5 ml-2">Selecciona una fecha</p>
             <div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar">
               {proximosDias.map((dia, i) => (
-                <button key={i} onClick={() => setDiaIdx(i)} className={`flex-shrink-0 w-20 h-24 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-1 active:scale-95 ${diaIdx === i ? 'border-[#0B5D34] bg-[#0B5D34] text-white shadow-lg shadow-[#0B5D34]/30 scale-105' : 'border-gray-50 bg-gray-50 text-gray-500 hover:border-gray-100'}`}>
+                <button key={i} onClick={() => {
+                    setDiaIdx(i);
+                    setTimeout(() => {
+                      document.getElementById('contenedor-horas')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 150);
+                  }} className={`flex-shrink-0 w-20 h-24 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-1 active:scale-95 ${diaIdx === i ? 'border-[#0B5D34] bg-[#0B5D34] text-white shadow-lg shadow-[#0B5D34]/30 scale-105' : 'border-gray-50 bg-gray-50 text-gray-500 hover:border-gray-100'}`}>
                   <span className="text-[10px] uppercase font-bold opacity-70">{dia.label.split(' ')[0]}</span><span className="text-xl font-black">{dia.label.split(' ')[1]}</span>
                 </button>
               ))}
@@ -411,7 +435,7 @@ function AgendaContent() {
 
         {/* PASO 4: HORARIOS */}
         <div className={`transition-all duration-700 ${diaIdx !== null ? 'opacity-100 translate-y-0 block' : 'opacity-0 translate-y-8 hidden'}`}>
-          <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-gray-100 relative overflow-hidden min-h-[200px]">
+          <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-gray-100 relative overflow-hidden min-h-[200px]" id="contenedor-horas">
             <div className="flex justify-between items-center mb-6 ml-2">
               <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em]">Horarios disponibles</p>
               {cargandoHoras && <Loader2 size={16} className="text-[#0B5D34] animate-spin" />}
@@ -459,7 +483,7 @@ function AgendaContent() {
   );
 }
 
-export default function Perfiles() {
+export default function Agenda() {
   return (
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-400">Cargando agenda Bionatura's...</div>}>
       <AgendaContent />
