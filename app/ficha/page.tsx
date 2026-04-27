@@ -318,7 +318,7 @@ function FichaContent() {
         </div>
 
         {/* BOTÓN FINAL ACTIVO */}
-        <div className="fixed bottom-8 left-4 right-4 max-w-xl mx-auto z-40">
+        <div className="pt-4 pb-8 w-full">
           <button 
             type="submit"
             disabled={cargando}
