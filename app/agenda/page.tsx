@@ -46,7 +46,7 @@ function AgendaContent() {
   const [motivoConsulta, setMotivoConsulta] = useState('');
   const [servicio, setServicio] = useState<any>(null);
   const [diaIdx, setDiaIdx] = useState<number | null>(null);
-  const [hora, setHora] = useState<string | null>(null);
+  const [hora, setHora] = useState<string | null>(null); 
   
   const [isServiceOpen, setIsServiceOpen] = useState(false);
   const [cargandoHoras, setCargandoHoras] = useState(false);
@@ -55,14 +55,15 @@ function AgendaContent() {
   const [esNuevo, setEsNuevo] = useState(true);
   const [citaAntigua, setCitaAntigua] = useState<string | null>(null);
   
-  // EL CAZAFANTASMAS: Estado para guardar el teléfono real desde la base de datos
   const [telefonoPaciente, setTelefonoPaciente] = useState<string>('');
+  const [zonaHorariaUsuario, setZonaHorariaUsuario] = useState('');
 
   useEffect(() => {
+    setZonaHorariaUsuario(Intl.DateTimeFormat().resolvedOptions().timeZone);
+
     const verificarPaciente = async () => {
       const { data } = await supabase
         .from('historias_clinicas')
-        // Buscamos también el teléfono real
         .select('fecha_nacimiento, proxima_cita, telefono')
         .eq('nombre_completo', nombre)
         .maybeSingle();
@@ -70,7 +71,7 @@ function AgendaContent() {
       if (data) {
         if (data.fecha_nacimiento) setEsNuevo(false);
         if (data.proxima_cita) setCitaAntigua(data.proxima_cita);
-        if (data.telefono) setTelefonoPaciente(data.telefono); // Guardamos el teléfono
+        if (data.telefono) setTelefonoPaciente(data.telefono);
       }
     };
     verificarPaciente();
@@ -89,17 +90,20 @@ function AgendaContent() {
         dias.push({
           label: fechaActual.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' }),
           full: `${year}-${month}-${day}`, 
-          formatoVzla: fechaVenezolana 
+          formatoVzla: fechaVenezolana,
+          esHoy: dias.length === 0
         });
       }
       fechaActual.setDate(fechaActual.getDate() + 1);
     }
     return dias;
   };
+  
   const proximosDias = obtenerProximosDias();
   const baseManana = ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30"];
   const baseTarde = ["14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30"];
-  const [huecos, setHuecos] = useState({ mañana: [] as string[], tarde: [] as string[] });
+  
+  const [huecos, setHuecos] = useState({ mañana: [] as any[], tarde: [] as any[] });
 
   useEffect(() => {
     const consultarDisponibilidad = async () => {
@@ -107,9 +111,12 @@ function AgendaContent() {
       setCargandoHoras(true);
       setHora(null);
       try {
-        const diaSeleccionado = proximosDias[diaIdx].full;
+        const diaElegido = proximosDias[diaIdx];
+        const diaSeleccionado = diaElegido.full;
         const inicioDia = new Date(`${diaSeleccionado}T00:00:00-04:00`);
         const finDia = new Date(`${diaSeleccionado}T23:59:59-04:00`);
+        
+        const ahora = new Date();
         
         const res = await fetch('/api/calendar', {
           method: 'POST',
@@ -119,10 +126,15 @@ function AgendaContent() {
         const data = await res.json();
         const ocupados = data.ocupados || [];
 
-        const filtrarHuecos = (horasBase: string[]) => {
+        const filtrarYConvertirHuecos = (horasBase: string[]) => {
           const disponibles = horasBase.filter((horaStr) => {
             const [h, m] = horaStr.split(':');
             const slotInicio = new Date(`${diaSeleccionado}T${h}:${m}:00-04:00`);
+            
+            if (diaElegido.esHoy && slotInicio <= ahora) {
+              return false;
+            }
+
             const slotFin = new Date(slotInicio.getTime() + servicio.duracion * 60000);
             const choca = ocupados.some((evento: any) => {
               const eventoInicio = new Date(evento.start);
@@ -131,11 +143,31 @@ function AgendaContent() {
             });
             return !choca;
           });
-          if (disponibles.length <= 3) return disponibles;
-          const midIdx = Math.floor(disponibles.length / 2);
-          return [disponibles[0], disponibles[midIdx], disponibles[disponibles.length - 1]];
+
+          let seleccionFinal = disponibles;
+          if (disponibles.length > 3) {
+            const midIdx = Math.floor(disponibles.length / 2);
+            seleccionFinal = [disponibles[0], disponibles[midIdx], disponibles[disponibles.length - 1]];
+          }
+
+          return seleccionFinal.map(horaVzla => {
+             const [h, m] = horaVzla.split(':');
+             const slotDate = new Date(`${diaSeleccionado}T${h}:${m}:00-04:00`);
+             
+             const horaLocalStr = slotDate.toLocaleTimeString('es-ES', {
+               hour: '2-digit',
+               minute: '2-digit',
+               hour12: false 
+             });
+
+             return {
+               horaVzla: horaVzla,
+               horaLocal: horaLocalStr
+             };
+          });
         };
-        setHuecos({ mañana: filtrarHuecos(baseManana), tarde: filtrarHuecos(baseTarde) });
+        
+        setHuecos({ mañana: filtrarYConvertirHuecos(baseManana), tarde: filtrarYConvertirHuecos(baseTarde) });
       } catch (error) {
         console.error(error);
       } finally {
@@ -232,9 +264,15 @@ function AgendaContent() {
     if (citaConfirmada) window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [citaConfirmada]);
 
-  // Pantalla de Confirmación de Cita
   if (citaConfirmada) {
-    const telefonoSeguro = telefonoPaciente || telefonoURL; // Usamos el teléfono de la DB, o el de la URL si existe
+    const telefonoSeguro = telefonoPaciente || telefonoURL; 
+    
+    let horaConfirmacionLocal = "";
+    if (hora && diaIdx !== null) {
+        const [h, m] = hora.split(':');
+        const slotDate = new Date(`${proximosDias[diaIdx].full}T${h}:${m}:00-04:00`);
+        horaConfirmacionLocal = slotDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+    }
 
     return (
       <div className="min-h-screen bg-[#0B5D34] flex flex-col items-center justify-center p-6 font-sans text-white animate-in zoom-in-95 duration-700">
@@ -249,7 +287,7 @@ function AgendaContent() {
             <p className="text-base leading-relaxed font-medium">
               ¡Hola, <span className="text-[#0B5D34] font-bold">{primerNombre}</span>! Soy Valentina 👋
               <br/><br/>
-              {citaAntigua ? 'He reprogramado tu cita con éxito. Ahora tu espacio es para:' : 'Ya aseguré tu espacio para:'} <span className="font-bold">{servicio.nombre}</span> el día <span className="font-bold text-[#0B5D34]">{proximosDias[diaIdx!].formatoVzla}</span> a las <span className="font-bold">{formatoAMPM(hora!)}</span>.
+              {citaAntigua ? 'He reprogramado tu cita con éxito. Ahora tu espacio es para:' : 'Ya aseguré tu espacio para:'} <span className="font-bold">{servicio.nombre}</span> el día <span className="font-bold text-[#0B5D34]">{proximosDias[diaIdx!].formatoVzla}</span> a las <span className="font-bold">{horaConfirmacionLocal}</span>.
             </p>
             <div className="flex items-center gap-2 mt-4 text-sm text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-100">
               <Clock size={18} className="text-[#0B5D34] shrink-0" />
@@ -307,7 +345,6 @@ function AgendaContent() {
           </div>
         </header>
 
-        {/* PASO 1: ÁNIMO */}
         <div className="bg-white rounded-[2.5rem] shadow-sm border border-gray-50 overflow-hidden animate-in slide-in-from-bottom-4">
           <div className="bg-gray-50 p-6 border-b border-gray-100">
             <h2 className="font-bold text-[#1F2937]">¿Cómo te sientes física y emocionalmente?</h2>
@@ -362,7 +399,6 @@ function AgendaContent() {
           </div>
         </div>
 
-        {/* PASO 2: SERVICIO */}
         <div className={`transition-all duration-700 ${estadosSeleccionados.length > 0 ? 'opacity-100 translate-y-0 block' : 'opacity-0 translate-y-8 hidden'}`}>
           <div className="relative z-30" id="contenedor-servicios">
             <button 
@@ -414,7 +450,6 @@ function AgendaContent() {
           </div>
         </div>
 
-        {/* PASO 3: FECHAS */}
         <div className={`transition-all duration-700 ${servicio ? 'opacity-100 translate-y-0 block' : 'opacity-0 translate-y-8 hidden'}`}>
           <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-gray-50">
             <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-5 ml-2">Selecciona una fecha</p>
@@ -433,7 +468,6 @@ function AgendaContent() {
           </div>
         </div>
 
-        {/* PASO 4: HORARIOS */}
         <div className={`transition-all duration-700 ${diaIdx !== null ? 'opacity-100 translate-y-0 block' : 'opacity-0 translate-y-8 hidden'}`}>
           <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-gray-100 relative overflow-hidden min-h-[200px]" id="contenedor-horas">
             <div className="flex justify-between items-center mb-6 ml-2">
@@ -442,8 +476,11 @@ function AgendaContent() {
             </div>
 
             <div className="bg-blue-50/80 text-blue-700 p-3 rounded-2xl flex items-center justify-center gap-2 mb-8 border border-blue-100/50">
-               <Globe size={16} className="opacity-80" />
-               <p className="text-[10px] font-bold uppercase tracking-widest">Horarios en hora de Venezuela (UTC-4)</p>
+               <Globe size={16} className="opacity-80 shrink-0" />
+               <p className="text-[10px] font-bold tracking-widest text-center">
+                  Horarios mostrados en tu zona local:<br/>
+                  <span className="uppercase">{zonaHorariaUsuario || 'Calculando...'}</span>
+               </p>
             </div>
 
             <div className={`space-y-8 relative z-10 transition-opacity duration-300 ${cargandoHoras ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
@@ -451,11 +488,13 @@ function AgendaContent() {
                 <div key={turno}>
                   <div className="flex items-center gap-2 mb-4 text-gray-400"><Clock size={14} /><span className="text-[10px] font-black uppercase tracking-widest">{turno}</span></div>
                   <div className="grid grid-cols-3 gap-3">
-                    {(huecos as any)[turno].map((h: string) => (
-                      <button key={h} onClick={() => setHora(h)} className={`py-4 rounded-2xl font-bold text-sm transition-all active:scale-95 ${hora === h ? 'bg-[#0B5D34] text-white shadow-md' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}>{h}</button>
+                    {(huecos as any)[turno].map((h: any) => (
+                      <button key={h.horaVzla} onClick={() => setHora(h.horaVzla)} className={`py-4 rounded-2xl font-bold text-sm transition-all active:scale-95 ${hora === h.horaVzla ? 'bg-[#0B5D34] text-white shadow-md' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}>
+                        {formatoAMPM(h.horaLocal)}
+                      </button>
                     ))}
                     {(huecos as any)[turno].length === 0 && !cargandoHoras && (
-                      <p className="text-xs text-gray-400 italic col-span-3">No hay espacios completos para este servicio en la {turno}</p>
+                      <p className="text-xs text-gray-400 italic col-span-3">No hay espacios para este servicio en la {turno}</p>
                     )}
                   </div>
                 </div>
@@ -464,7 +503,6 @@ function AgendaContent() {
           </div>
         </div>
 
-        {/* PASO 5: CONFIRMACIÓN */}
         {hora && servicio && (
           <div className="fixed bottom-8 left-4 right-4 max-w-xl mx-auto animate-in slide-in-from-bottom-8 duration-500 z-40">
             <button 
@@ -485,7 +523,7 @@ function AgendaContent() {
 
 export default function Agenda() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-400">Cargando agenda Bionatura's...</div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[#0B5D34] font-bold animate-pulse">Cargando agenda...</div>}>
       <AgendaContent />
     </Suspense>
   );

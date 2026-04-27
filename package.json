@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.1",
+    "astronomy-engine": "^2.1.19",
     "googleapis": "^171.4.0",
     "lucide-react": "^1.11.0",
     "next": "16.2.4",
