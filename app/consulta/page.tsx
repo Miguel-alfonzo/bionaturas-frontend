@@ -28,7 +28,7 @@ function ConsultaContent() {
   const [historialAbierto, setHistorialAbierto] = useState<number | null>(null);
 
   // ESTADOS FINANCIEROS
-  const [tipoPago, setTipoPago] = useState('Completo'); // Completo, Parcial, Donacion
+  const [tipoPago, setTipoPago] = useState('Completo'); 
   const [costoTotal, setCostoTotal] = useState('');
   const [montoPagado, setMontoPagado] = useState('');
 
@@ -84,7 +84,7 @@ function ConsultaContent() {
     setGuardando(true);
     setAccionActiva(tipo);
 
-    // LÓGICA FINANCIERA
+    // LÓGICA FINANCIERA ACTUALIZADA
     let deudaGenerada = 0;
     let costoReal = parseFloat(costoTotal) || 0;
     let pagoReal = parseFloat(montoPagado) || 0;
@@ -94,8 +94,9 @@ function ConsultaContent() {
     } else if (tipoPago === 'Parcial') {
       deudaGenerada = costoReal - pagoReal;
     } else if (tipoPago === 'Donacion') {
-      costoReal = 0;
       pagoReal = 0;
+      deudaGenerada = 0;
+      // costoReal se mantiene intacto para saber cuánto donaste
     }
 
     const saldoPendienteActualizado = (parseFloat(paciente.saldo_pendiente) || 0) + deudaGenerada;
@@ -123,7 +124,7 @@ function ConsultaContent() {
         .update({
           historial_consultas: nuevoHistorial,
           peso_aproximado: peso,
-          saldo_pendiente: saldoPendienteActualizado, // Guarda la deuda real en base de datos
+          saldo_pendiente: saldoPendienteActualizado, 
           mediciones: '',
           protocolo: '',
           observaciones: '',
@@ -184,7 +185,6 @@ function ConsultaContent() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-bold text-gray-800 leading-none">{paciente.nombre_completo}</h1>
-                {/* ALERTA VISUAL DE DEUDAS */}
                 {paciente.saldo_pendiente > 0 && (
                   <span className="bg-red-100 text-red-700 text-[9px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
                     <AlertTriangle size={10}/> Debe ${paciente.saldo_pendiente}
@@ -225,7 +225,6 @@ function ConsultaContent() {
         
         {tabActiva === 'ficha' && (
           <div className="space-y-6 animate-in fade-in duration-300">
-            {/* Contenido Ficha (Igual) */}
             <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-gray-100">
               <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-6 border-b pb-4"><Info size={18} className="text-[#0B5D34]"/> Datos Base y Antecedentes</h3>
               <div className="grid md:grid-cols-2 gap-6">
@@ -243,12 +242,15 @@ function ConsultaContent() {
                 </div>
               </div>
             </div>
+            <div className="bg-gray-100/50 border-2 border-dashed border-gray-200 rounded-[2.5rem] p-10 text-center">
+              <Upload size={32} className="mx-auto text-gray-400 mb-2" />
+              <p className="text-sm font-bold text-gray-500">Subir exámenes o fotos (Fase 3)</p>
+            </div>
           </div>
         )}
 
         {tabActiva === 'evolucion' && (
           <div className="space-y-6 animate-in fade-in duration-500">
-             {/* Contenido Evolución (Actualizado con finanzas) */}
              <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
               <h2 className="font-bold text-gray-700 flex items-center gap-2">
                 <History className="text-[#0B5D34]" size={20} /> Historial Clínico
@@ -278,8 +280,7 @@ function ConsultaContent() {
                         <p className="font-bold text-gray-700 flex items-center gap-2">
                           {visita.tipo} 
                           {visita.peso && <span className="text-gray-400 font-medium text-xs">| {visita.peso} kg</span>}
-                          {/* Etiqueta Financiera en el historial */}
-                          {visita.finanzas && visita.finanzas.tipoPago === 'Donacion' && <span className="bg-purple-100 text-purple-700 text-[9px] px-2 py-0.5 rounded-md uppercase">Obra Social</span>}
+                          {visita.finanzas && visita.finanzas.tipoPago === 'Donacion' && <span className="bg-purple-100 text-purple-700 text-[9px] px-2 py-0.5 rounded-md uppercase">Donado: ${visita.finanzas.costo}</span>}
                           {visita.finanzas && visita.finanzas.tipoPago === 'Parcial' && <span className="bg-yellow-100 text-yellow-700 text-[9px] px-2 py-0.5 rounded-md uppercase">Deuda: ${visita.finanzas.deudaGenerada}</span>}
                         </p>
                       </div>
@@ -341,7 +342,7 @@ function ConsultaContent() {
               <textarea value={observaciones} spellCheck="true" onChange={(e) => setObservaciones(e.target.value)} onBlur={(e) => aplicarCapitalizacion(e.target.value, setObservaciones)} placeholder="Solo tú verás esto..." className="w-full bg-gray-50 border-0 rounded-2xl p-5 text-gray-700 outline-none min-h-[100px] text-sm"/>
             </div>
 
-            {/* NUEVA SECCIÓN: CIERRE FINANCIERO */}
+            {/* SECCIÓN DE CIERRE FINANCIERO (ACTUALIZADA) */}
             <div className="bg-gray-800 rounded-[2.5rem] p-6 shadow-lg text-white">
               <h3 className="font-bold flex items-center gap-2 mb-6"><DollarSign size={18} className="text-green-400"/> Cierre Financiero</h3>
               
@@ -353,20 +354,20 @@ function ConsultaContent() {
                 ))}
               </div>
 
-              {tipoPago !== 'Donacion' && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-900/50 p-4 rounded-2xl border border-gray-700 focus-within:border-green-500 transition-colors">
-                    <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Costo Total ($)</p>
-                    <input type="number" value={costoTotal} onChange={(e) => setCostoTotal(e.target.value)} placeholder="0" className="w-full bg-transparent font-bold text-xl outline-none"/>
-                  </div>
-                  {tipoPago === 'Parcial' && (
-                    <div className="bg-gray-900/50 p-4 rounded-2xl border border-gray-700 focus-within:border-yellow-500 transition-colors">
-                      <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Monto Pagado ($)</p>
-                      <input type="number" value={montoPagado} onChange={(e) => setMontoPagado(e.target.value)} placeholder="0" className="w-full bg-transparent font-bold text-xl outline-none text-yellow-400"/>
-                    </div>
-                  )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className={`bg-gray-900/50 p-4 rounded-2xl border border-gray-700 transition-colors ${tipoPago === 'Donacion' ? 'focus-within:border-purple-500 col-span-2' : 'focus-within:border-green-500'}`}>
+                  <p className="text-[10px] font-black text-gray-400 uppercase mb-1">
+                    {tipoPago === 'Donacion' ? 'Valor Donado ($)' : 'Costo Total ($)'}
+                  </p>
+                  <input type="number" value={costoTotal} onChange={(e) => setCostoTotal(e.target.value)} placeholder="0" className={`w-full bg-transparent font-bold text-xl outline-none ${tipoPago === 'Donacion' ? 'text-purple-400' : ''}`}/>
                 </div>
-              )}
+                {tipoPago === 'Parcial' && (
+                  <div className="bg-gray-900/50 p-4 rounded-2xl border border-gray-700 focus-within:border-yellow-500 transition-colors">
+                    <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Monto Pagado ($)</p>
+                    <input type="number" value={montoPagado} onChange={(e) => setMontoPagado(e.target.value)} placeholder="0" className="w-full bg-transparent font-bold text-xl outline-none text-yellow-400"/>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-4 pt-2">
