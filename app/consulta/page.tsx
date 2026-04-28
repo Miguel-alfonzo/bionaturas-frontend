@@ -12,10 +12,25 @@ import {
 
 // --- BASE DE DATOS DE TUS RECETAS COMUNES ---
 const RECETAS_PREDEFINIDAS = [
-  { nombre: "Té Renal 1", texto: "Tomar Té Renal 1: de 5:00 a.m. a 7:00 a.m. y de 5:00 p.m. a 7:00 p.m." },
-  { nombre: "Té Hepático", texto: "Tomar Té Hepático: 1 taza después del almuerzo y 1 taza después de la cena." },
-  { nombre: "Magnesio", texto: "Citrato de Magnesio: 1 cápsula de 500mg antes de dormir." },
-  { nombre: "Desparasitante", texto: "Tratamiento desparasitante: Tomar en ayunas por 3 días seguidos." }
+  { nombre: "Renal 1", texto: "Renal 1: tomar de 5 - 7 a.m. y luego de 5 - 7 p.m." },
+  { nombre: "Digestivo", texto: "Digestivo: tomar después del almuerzo." },
+  { nombre: "Citovit", texto: "Citovit: tomar cada 12 h." },
+  { nombre: "Proteinel", texto: "Proteinel: tomar dos capsulas en ayunas." },
+  { nombre: "Hemático", texto: "Hemático: tomar en la noche." },
+  { nombre: "Totumoral tisana", texto: "Totumoral tisana: tomar cada 12 h." },
+  { nombre: "Circulatorio Gts", texto: "Circulatorio Gts: tomar 10 Gts bajo la lengua a media mañana y en la noche." },
+  { nombre: "Neurotónico Gts", texto: "Neurotónico Gts: tomar 15 Gts bajo la lengua 3 veces al dia." },
+  { nombre: "Femestrog", texto: "Femestrog: tomar 20 Gts bajo la lengua en ayunas y cada vez que presente dolor de vientre." },
+  { nombre: "Expulsador", texto: "Expulsador: tomar 20 Gts bajo la lengua en ayunas y en la noche." },
+  { nombre: "Inmunel", texto: "Inmunel: tomar 20 Gts bajo la lengua en ayunas." },
+  { nombre: "Rescate", texto: "Rescate: tomar 15 Gts bajo la lengua 3 veces al dia." },
+  { nombre: "Br-1 tisana", texto: "Br-1 tisana: tomar en ayunas." },
+  { nombre: "Lipodren", texto: "Lipodren: tomar antes de almorzar y antes de cenar." },
+  { nombre: "Pulmovid tisana", texto: "Pulmovid tisana: tomar cada 12 h." },
+  { nombre: "Magnesio", texto: "Citrato de Magnesio: 2 cápsula de 500mg en la tarde." },
+  { nombre: "Flavoxigen", texto: "Flavoxigen: tomar 2 capsulas cada 12 h." },
+  { nombre: "Ñame salvaje", texto: "Ñame salvaje: tomar 2 capsulas en ayunas." },
+  { nombre: "Hepático", texto: "Hepático: tomar 2 capsulas cada 12 h." }
 ];
 
 function ConsultaContent() {
