@@ -7,7 +7,7 @@ import {
   ChevronLeft, ClipboardList, Activity, Sparkles, 
   Save, User, MapPin, Calendar, Clock, 
   Upload, Loader2, Info, History, ChevronDown, ChevronUp, 
-  Stethoscope, Zap, Scale, DollarSign, HeartHandshake, AlertTriangle, AlertCircle, Bot
+  Stethoscope, Zap, Scale, DollarSign, HeartHandshake, AlertTriangle, AlertCircle, Bot, Utensils
 } from 'lucide-react';
 
 // --- BASE DE DATOS DE TUS RECETAS COMUNES ---
@@ -48,6 +48,7 @@ function ConsultaContent() {
   const [peso, setPeso] = useState('');
   const [mediciones, setMediciones] = useState('');
   const [protocolo, setProtocolo] = useState('');
+  const [dieta, setDieta] = useState(''); // <-- CIRUGÍA: NUEVO ESTADO PARA LA DIETA
   const [observaciones, setObservaciones] = useState('');
   const [historialAbierto, setHistorialAbierto] = useState<number | null>(null);
 
@@ -82,6 +83,7 @@ function ConsultaContent() {
         setPeso(data.peso_aproximado || '');
         setMediciones(data.mediciones || '');
         setProtocolo(data.protocolo || '');
+        setDieta(data.dieta || ''); // <-- CIRUGÍA: CARGAMOS LA DIETA SI YA EXISTE
         setObservaciones(data.observaciones || '');
         
         setFechaRect(data.fecha_nacimiento || '');
@@ -102,10 +104,11 @@ function ConsultaContent() {
         
         const respaldo = localStorage.getItem(`respaldo_${nombre}`);
         if (respaldo) {
-          const { pe, m, p, o } = JSON.parse(respaldo);
+          const { pe, m, p, d, o } = JSON.parse(respaldo); // <-- CIRUGÍA: 'd' PARA DIETA
           if (!data.peso_aproximado && pe) setPeso(pe);
           if (!data.mediciones && m) setMediciones(m);
           if (!data.protocolo && p) setProtocolo(p);
+          if (!data.dieta && d) setDieta(d); // <-- CIRUGÍA: RESPALDO DE DIETA
           if (!data.observaciones && o) setObservaciones(o);
         }
       }
@@ -115,11 +118,11 @@ function ConsultaContent() {
   }, [nombre]);
 
   useEffect(() => {
-    if (nombre && (peso || mediciones || protocolo || observaciones)) {
-      const datos = { pe: peso, m: mediciones, p: protocolo, o: observaciones };
+    if (nombre && (peso || mediciones || protocolo || dieta || observaciones)) {
+      const datos = { pe: peso, m: mediciones, p: protocolo, d: dieta, o: observaciones };
       localStorage.setItem(`respaldo_${nombre}`, JSON.stringify(datos));
     }
-  }, [peso, mediciones, protocolo, observaciones, nombre]);
+  }, [peso, mediciones, protocolo, dieta, observaciones, nombre]);
 
   const aplicarCapitalizacion = (texto: string, setter: any) => {
     const corregido = texto.replace(/(^\s*|\n\s*|[.!?]\s+)([a-z])/g, (m, separador, letra) => separador + letra.toUpperCase());
@@ -147,7 +150,7 @@ function ConsultaContent() {
   };
 
   const archivarVisita = async (tipo: 'Consulta' | 'Terapia') => {
-    if (!mediciones && !protocolo && !observaciones && !peso) {
+    if (!mediciones && !protocolo && !dieta && !observaciones && !peso) {
       alert("No hay información nueva para archivar.");
       return;
     }
@@ -190,9 +193,10 @@ function ConsultaContent() {
           historial_consultas: nuevoHistorial,
           peso_aproximado: peso,
           saldo_pendiente: saldoPendienteActualizado, 
-          mediciones: '',
-          protocolo: '',
-          observaciones: '',
+          mediciones: '', // Borramos esto de la caja para la proxima consulta
+          protocolo: protocolo, // <-- CIRUGÍA: AHORA SÍ SE GUARDA PARA EL PACIENTE
+          dieta: dieta, // <-- CIRUGÍA: GUARDAMOS LA DIETA PARA EL PACIENTE
+          observaciones: '', // Borramos notas privadas de la caja
           ultima_consulta: new Date().toISOString()
         })
         .eq('nombre_completo', nombre);
@@ -201,7 +205,7 @@ function ConsultaContent() {
       
       setPaciente({ ...paciente, historial_consultas: nuevoHistorial, peso_aproximado: peso, saldo_pendiente: saldoPendienteActualizado });
       setMediciones('');
-      setProtocolo('');
+      // No borramos setProtocolo('') ni setDieta('') de la UI para que sigas viéndolos, ya que ahora son fijos hasta que los cambies.
       setObservaciones('');
       setCostoTotal('');
       setMontoPagado('');
@@ -225,7 +229,7 @@ function ConsultaContent() {
     try {
       const { error } = await supabase
         .from('historias_clinicas')
-        .update({ peso_aproximado: peso, mediciones, protocolo, observaciones })
+        .update({ peso_aproximado: peso, mediciones, protocolo, dieta, observaciones }) // <-- CIRUGÍA: AÑADIDO DIETA AL BORRADOR
         .eq('nombre_completo', nombre);
       if (error) throw error;
     } catch (err) {
@@ -323,7 +327,7 @@ function ConsultaContent() {
         fecha_consulta: new Date().toLocaleDateString('es-VE'),
         edad: paciente.edad,
         sexo: paciente.sexo || 'No especificado',
-        profesion: paciente.ocupacion || 'No especificada',
+        profesion: paciente.ocupacion_profesion || paciente.ocupacion || paciente.profesion || 'No especificada',
         peso_aproximado: peso || paciente.peso_aproximado || 'No especificado',
         alergias: paciente.alergias || 'Ninguna',
         medicamentos_actuales: paciente.medicamentos_actuales || 'Ninguno',
@@ -551,6 +555,28 @@ function ConsultaContent() {
                 />
               </div>
             </div>
+
+            {/* --- CIRUGÍA: NUEVA SECCIÓN DE DIETA APROBADA --- */}
+            <div className="bg-orange-500 rounded-[2.5rem] shadow-xl shadow-orange-500/20 overflow-hidden">
+              <div className="bg-white p-6 flex flex-col items-center justify-center border-b border-gray-100">
+                  <h3 className="font-bold text-orange-600 flex items-center gap-2 text-center uppercase tracking-widest text-xs mt-2">
+                      <Utensils size={14}/> Dieta Aprobada (Para el paciente)
+                  </h3>
+                  <p className="text-[10px] text-gray-400 mt-1 text-center font-medium">Copia y pega aquí la dieta sugerida por Valentina</p>
+              </div>
+              
+              <div className="p-6">
+                <textarea 
+                  value={dieta} 
+                  spellCheck="true" 
+                  onChange={(e) => setDieta(e.target.value)} 
+                  onBlur={(e) => aplicarCapitalizacion(e.target.value, setDieta)} 
+                  placeholder="Todo lo que pegues aquí aparecerá automáticamente en el portal del paciente..." 
+                  className="w-full bg-white/10 border border-white/20 rounded-2xl p-5 text-white placeholder-orange-100/50 outline-none focus:bg-white/20 min-h-[200px] transition-all"
+                />
+              </div>
+            </div>
+            {/* ----------------------------------------------- */}
 
             <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-gray-100">
               <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4 text-sm opacity-60">Notas Privadas</h3>

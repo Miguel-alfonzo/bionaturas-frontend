@@ -68,7 +68,7 @@ function ExpedienteContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F3F4F6] flex flex-col items-center p-4 md:p-12 pb-32 font-sans relative">
+    <div className="min-h-screen bg-[#F3F4F6] flex flex-col items-center p-4 md:p-12 pb-16 font-sans relative">
       <div className="w-full max-w-xl space-y-6 animate-in fade-in duration-700">
         
         <header className="flex items-center justify-between mb-2">
@@ -128,7 +128,7 @@ function ExpedienteContent() {
           <Scale className="text-gray-50 opacity-80" size={60} />
         </div>
 
-        {/* SECCIÓN: PROTOCOLO (CORREGIDO LA FUENTE ITALIC POR NORMAL/MEDIUM) */}
+        {/* SECCIÓN: PROTOCOLO */}
         <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100">
           <div className="flex items-center gap-3 mb-6 border-b border-gray-50 pb-4">
             <div className="w-10 h-10 bg-[#0B5D34]/10 text-[#0B5D34] rounded-xl flex items-center justify-center">
@@ -174,10 +174,11 @@ function ExpedienteContent() {
           <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-4">— Dr. Luis Alfonzo Yépez</p>
         </div>
 
-        <div className="fixed bottom-8 left-4 right-4 max-w-xl mx-auto z-40">
+        {/* BOTÓN DE VALENTINA (AHORA AL FINAL, NO FLOTANTE) */}
+        <div className="mt-8 mb-4">
           <button 
             onClick={() => alert("Pronto te conectaremos directo al chat de Valentina.")}
-            className="w-full py-5 bg-[#0B5D34] text-white font-black rounded-[2rem] shadow-2xl shadow-[#0B5D34]/40 hover:bg-[#084b29] hover:-translate-y-1 active:scale-95 transition-all flex items-center justify-center gap-3 text-sm md:text-base uppercase tracking-widest"
+            className="w-full py-5 bg-[#0B5D34] text-white font-black rounded-[2rem] shadow-xl shadow-[#0B5D34]/20 hover:bg-[#084b29] hover:-translate-y-1 active:scale-95 transition-all flex items-center justify-center gap-3 text-sm md:text-base uppercase tracking-widest"
           >
             <MessageCircle size={20} />
             Hablar con Valentina
