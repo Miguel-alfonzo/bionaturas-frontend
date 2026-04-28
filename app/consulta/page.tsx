@@ -2,11 +2,21 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import RadixChart from '../components/RadixChart';
 import { 
   ChevronLeft, ClipboardList, Activity, Sparkles, 
   Save, User, MapPin, Calendar, Clock, 
-  Upload, Loader2, Info, History, ChevronDown, ChevronUp, Stethoscope, Zap, Scale, DollarSign, HeartHandshake, AlertTriangle
+  Upload, Loader2, Info, History, ChevronDown, ChevronUp, 
+  Stethoscope, Zap, Scale, DollarSign, HeartHandshake, AlertTriangle, AlertCircle, Bot
 } from 'lucide-react';
+
+// --- BASE DE DATOS DE TUS RECETAS COMUNES ---
+const RECETAS_PREDEFINIDAS = [
+  { nombre: "Té Renal 1", texto: "Tomar Té Renal 1: de 5:00 a.m. a 7:00 a.m. y de 5:00 p.m. a 7:00 p.m." },
+  { nombre: "Té Hepático", texto: "Tomar Té Hepático: 1 taza después del almuerzo y 1 taza después de la cena." },
+  { nombre: "Magnesio", texto: "Citrato de Magnesio: 1 cápsula de 500mg antes de dormir." },
+  { nombre: "Desparasitante", texto: "Tratamiento desparasitante: Tomar en ayunas por 3 días seguidos." }
+];
 
 function ConsultaContent() {
   const router = useRouter();
@@ -17,7 +27,7 @@ function ConsultaContent() {
   const [tabActiva, setTabActiva] = useState('consulta'); 
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
-  const [accionActiva, setAccionActiva] = useState(''); 
+  const [accionActiva, setAccionActiva] = useState('');
   const [filtroHistorial, setFiltroHistorial] = useState('todos');
 
   const [peso, setPeso] = useState('');
@@ -26,9 +36,21 @@ function ConsultaContent() {
   const [observaciones, setObservaciones] = useState('');
   const [historialAbierto, setHistorialAbierto] = useState<number | null>(null);
 
-  const [tipoPago, setTipoPago] = useState('Completo'); 
+  const [tipoPago, setTipoPago] = useState('Completo');
   const [costoTotal, setCostoTotal] = useState('');
   const [montoPagado, setMontoPagado] = useState('');
+
+  const [datosRadix, setDatosRadix] = useState<any>(null);
+  const [cargandoRadix, setCargandoRadix] = useState(false);
+
+  const [fechaRect, setFechaRect] = useState('');
+  const [horaRect, setHoraRect] = useState('12:00 PM');
+  
+  const [latitudRect, setLatitudRect] = useState('10.48'); 
+  const [longitudRect, setLongitudRect] = useState('-66.90'); 
+
+  const [analisisIA, setAnalisisIA] = useState<string>('');
+  const [cargandoIA, setCargandoIA] = useState(false);
 
   useEffect(() => {
     const fetchPaciente = async () => {
@@ -46,6 +68,22 @@ function ConsultaContent() {
         setMediciones(data.mediciones || '');
         setProtocolo(data.protocolo || '');
         setObservaciones(data.observaciones || '');
+        
+        setFechaRect(data.fecha_nacimiento || '');
+        setHoraRect(data.hora_nacimiento || '12:00 PM');
+
+        if (data.lugar_nacimiento) {
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(data.lugar_nacimiento)}&limit=1`);
+            const geoData = await res.json();
+            if (geoData && geoData.length > 0) {
+              setLatitudRect(parseFloat(geoData[0].lat).toFixed(2));
+              setLongitudRect(parseFloat(geoData[0].lon).toFixed(2));
+            }
+          } catch (err) {
+            console.error("Error localizando ciudad:", err);
+          }
+        }
         
         const respaldo = localStorage.getItem(`respaldo_${nombre}`);
         if (respaldo) {
@@ -73,6 +111,26 @@ function ConsultaContent() {
     setter(corregido);
   };
 
+  const agregarRecetaRapida = (textoAdicional: string) => {
+    setProtocolo(prev => prev ? `${prev}\n- ${textoAdicional}` : `- ${textoAdicional}`);
+  };
+
+  const obtenerFechaHoraFormateada = () => {
+    const ahora = new Date();
+    const fechaVisual = ahora.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const horaVisual = ahora.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+    return `${fechaVisual} a las ${horaVisual}`;
+  };
+
+  const formatearFechaVisual = (fechaStr: string) => {
+    if (!fechaStr) return '--';
+    if (fechaStr.includes('-')) {
+      const [y, m, d] = fechaStr.split('-');
+      return `${d}/${m}/${y}`;
+    }
+    return fechaStr;
+  };
+
   const archivarVisita = async (tipo: 'Consulta' | 'Terapia') => {
     if (!mediciones && !protocolo && !observaciones && !peso) {
       alert("No hay información nueva para archivar.");
@@ -98,12 +156,8 @@ function ConsultaContent() {
     const saldoPendienteActualizado = (parseFloat(paciente.saldo_pendiente) || 0) + deudaGenerada;
 
     const nuevaEntrada = {
-      fecha: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-      tipo,
-      peso,
-      mediciones,
-      protocolo,
-      observaciones,
+      fecha: obtenerFechaHoraFormateada(),
+      tipo, peso, mediciones, protocolo, observaciones,
       finanzas: {
         tipoPago,
         costo: costoReal,
@@ -167,7 +221,128 @@ function ConsultaContent() {
     }
   };
 
+  // FUNCIÓN PARA CAMBIAR AM/PM MANUALMENTE
+  const toggleAMPM = () => {
+    setHoraRect(prev => {
+      const parts = prev.split(' ');
+      if (parts.length < 2) return prev;
+      const newAMPM = parts[1] === 'AM' ? 'PM' : 'AM';
+      return `${parts[0]} ${newAMPM}`;
+    });
+  };
+
+  const modificarTiempo = (tipo: 'dia' | 'hora' | 'minuto', cantidad: number) => {
+    if (!fechaRect) return;
+    let anio, mes, dia;
+    if (fechaRect.includes('-')) [anio, mes, dia] = fechaRect.split('-');
+    else [dia, mes, anio] = fechaRect.split('/'); 
+    
+    let hrs = 12, mins = 0;
+    const timeMatch = horaRect.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (timeMatch) {
+      hrs = parseInt(timeMatch[1], 10);
+      mins = parseInt(timeMatch[2], 10);
+      if (timeMatch[3]?.toUpperCase() === 'PM' && hrs < 12) hrs += 12;
+      if (timeMatch[3]?.toUpperCase() === 'AM' && hrs === 12) hrs = 0;
+    }
+
+    const d = new Date(Number(anio), Number(mes) - 1, Number(dia), hrs, mins);
+    if (tipo === 'dia') d.setDate(d.getDate() + cantidad);
+    if (tipo === 'hora') d.setHours(d.getHours() + cantidad);
+    if (tipo === 'minuto') d.setMinutes(d.getMinutes() + cantidad);
+
+    const nuevoDia = String(d.getDate()).padStart(2, '0');
+    const nuevoMes = String(d.getMonth() + 1).padStart(2, '0');
+    const nuevoAnio = d.getFullYear();
+    setFechaRect(`${nuevoDia}/${nuevoMes}/${nuevoAnio}`);
+
+    let h = d.getHours();
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    h = h ? h : 12;
+    setHoraRect(`${String(h).padStart(2, '0')}:${m} ${ampm}`);
+  };
+
+  const cargarRadix = async () => {
+    if (!fechaRect) return;
+    setCargandoRadix(true);
+    try {
+      const { error } = await supabase
+        .from('historias_clinicas')
+        .update({ fecha_nacimiento: fechaRect, hora_nacimiento: horaRect })
+        .eq('nombre_completo', nombre);
+
+      if (error) console.error("Error al actualizar la base de datos:", error);
+      else setPaciente((prev: any) => ({ ...prev, fecha_nacimiento: fechaRect, hora_nacimiento: horaRect }));
+
+      const res = await fetch('/api/radix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          fecha: fechaRect, 
+          hora: horaRect, 
+          latitud: parseFloat(latitudRect) || 10.48, 
+          longitud: parseFloat(longitudRect) || -66.90 
+        })
+      });
+      const data = await res.json();
+      if (data.exito) setDatosRadix(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCargandoRadix(false);
+    }
+  };
+
+  const analizarConValentina = async () => {
+    if (!datosRadix || !paciente) return;
+    setCargandoIA(true);
+    setAnalisisIA(''); 
+    
+    try {
+      const payload = {
+        nombre_paciente: paciente.nombre_completo,
+        fecha_nacimiento: paciente.fecha_nacimiento,
+        hora_nacimiento: paciente.hora_nacimiento,
+        fecha_consulta: new Date().toLocaleDateString('es-VE'),
+        edad: paciente.edad,
+        sexo: paciente.sexo || 'No especificado',
+        profesion: paciente.ocupacion || 'No especificada',
+        peso_aproximado: peso || paciente.peso_aproximado || 'No especificado',
+        alergias: paciente.alergias || 'Ninguna',
+        medicamentos_actuales: paciente.medicamentos_actuales || 'Ninguno',
+        antecedentes_enfermedades: paciente.antecedentes_enfermedades || 'Ninguno',
+        motivo_consulta: paciente.motivo_consulta || mediciones || 'Revisión General',
+        observaciones: observaciones,
+        posiciones_planetarias: datosRadix.posiciones,
+        casas_astrologicas: datosRadix.casas,
+        aspectos_principales: datosRadix.aspectos
+      };
+
+      const res = await fetch('/api/asistente', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (data.exito) {
+        setAnalisisIA(data.analisis);
+      } else {
+        setAnalisisIA('Error de conexión con Valentina. Verifica que la API Key en el .env sea válida.');
+      }
+    } catch (error) {
+      setAnalisisIA('Fallo en el servidor al contactar a la IA.');
+    } finally {
+      setCargandoIA(false);
+    }
+  };
+
   if (cargando) return <div className="min-h-screen flex items-center justify-center text-[#0B5D34] font-bold animate-pulse">Abriendo expediente...</div>;
+
+  const SIGNO_ICONS = ["♈\uFE0E", "♉\uFE0E", "♊\uFE0E", "♋\uFE0E", "♌\uFE0E", "♍\uFE0E", "♎\uFE0E", "♏\uFE0E", "♐\uFE0E", "♑\uFE0E", "♒\uFE0E", "♓\uFE0E"];
+  const PLANETA_ICONS: any = { Sol: "☉\uFE0E", Luna: "☽\uFE0E", Mercurio: "☿\uFE0E", Venus: "♀\uFE0E", Marte: "♂\uFE0E", Júpiter: "♃\uFE0E", Saturno: "♄\uFE0E", Urano: "♅\uFE0E", Neptuno: "♆\uFE0E", Plutón: "♇\uFE0E" };
 
   return (
     <div className="min-h-screen bg-[#F1F5F9] pb-32 font-sans">
@@ -217,16 +392,17 @@ function ConsultaContent() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto p-4 md:p-8">
+      <main className="max-w-[1400px] mx-auto p-4 md:p-8">
         
+        {/* --- PESTAÑAS FICHA Y EVOLUCIÓN --- */}
         {tabActiva === 'ficha' && (
-          <div className="space-y-6 animate-in fade-in duration-300">
+          <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
             <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-gray-100">
               <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-6 border-b pb-4"><Info size={18} className="text-[#0B5D34]"/> Datos Base y Antecedentes</h3>
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-4">
-                  <div><p className="text-[10px] font-black text-gray-400 uppercase">Edad y Origen</p><p className="font-bold text-gray-700">{paciente.edad || '--'} años • {paciente.lugar_nacimiento || 'No registrado'}</p></div>
-                  <div><p className="text-[10px] font-black text-gray-400 uppercase">Hora de nacimiento</p><p className="font-bold text-gray-700">{paciente.hora_nacimiento || 'No sabe'}</p></div>
+                  <div><p className="text-[10px] font-black text-gray-400 uppercase">Fecha de Nacimiento</p><p className="font-bold text-gray-700">{formatearFechaVisual(paciente.fecha_nacimiento)} ({paciente.edad || '--'} años)</p></div>
+                  <div><p className="text-[10px] font-black text-gray-400 uppercase">Hora y Lugar</p><p className="font-bold text-gray-700">{paciente.hora_nacimiento || 'No sabe'} • {paciente.lugar_nacimiento || 'No registrado'}</p></div>
                   <div><p className="text-[10px] font-black text-[#0B5D34] uppercase mb-1">Motivo de ingreso:</p><p className="text-sm text-gray-600 leading-relaxed italic">"{paciente.motivo_consulta || 'Sin especificar'}"</p></div>
                   <div><p className="text-[10px] font-black text-[#0B5D34] uppercase mb-1">Enfermedades previas:</p><p className="text-sm text-gray-700 font-medium">{paciente.antecedentes_enfermedades || 'Ninguna'}</p></div>
                 </div>
@@ -242,7 +418,7 @@ function ConsultaContent() {
         )}
 
         {tabActiva === 'evolucion' && (
-          <div className="space-y-6 animate-in fade-in duration-500">
+          <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-500">
              <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
               <h2 className="font-bold text-gray-700 flex items-center gap-2">
                 <History className="text-[#0B5D34]" size={20} /> Historial Clínico
@@ -308,8 +484,9 @@ function ConsultaContent() {
           </div>
         )}
 
+        {/* --- PESTAÑA SESIÓN CON AUTO-RECETAS --- */}
         {tabActiva === 'consulta' && (
-          <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+          <div className="max-w-5xl mx-auto space-y-6 animate-in slide-in-from-right-4 duration-300">
             
             <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-gray-100 flex items-center gap-4">
               <div className="w-12 h-12 bg-green-50 text-[#0B5D34] rounded-2xl flex items-center justify-center shrink-0"><Scale size={24}/></div>
@@ -324,18 +501,31 @@ function ConsultaContent() {
               <textarea value={mediciones} spellCheck="true" onChange={(e) => setMediciones(e.target.value)} onBlur={(e) => aplicarCapitalizacion(e.target.value, setMediciones)} placeholder="Dermatrón, Pulsos, lengua..." className="w-full bg-gray-50 border-0 rounded-2xl p-5 text-gray-700 outline-none focus:ring-4 focus:ring-[#0B5D34]/5 min-h-[150px] transition-all"/>
             </div>
 
-            {/* SECCIÓN DE PROTOCOLO REDISEÑADA CON FONDO BLANCO PARA EL LOGO */}
             <div className="bg-[#0B5D34] rounded-[2.5rem] shadow-xl shadow-[#0B5D34]/20 overflow-hidden">
-              {/* CABECERA BLANCA PARA EL LOGO */}
               <div className="bg-white p-6 flex flex-col items-center justify-center border-b border-gray-100">
                   <img src="/logo-bionaturas.svg" alt="Logo Bionatura's" className="h-16 w-auto mb-3 object-contain" /> 
-                  <h3 className="font-bold text-[#0B5D34] flex items-center gap-2 text-center uppercase tracking-widest text-xs">
+                  <h3 className="font-bold text-[#0B5D34] flex items-center gap-2 text-center uppercase tracking-widest text-xs mt-2">
                       <ClipboardList size={14}/> Protocolo y Receta
                   </h3>
               </div>
               
-              {/* ÁREA DE TEXTO (FONDO VERDE) */}
               <div className="p-6">
+                
+                <div className="mb-4 bg-white/5 p-3 rounded-2xl border border-white/10">
+                  <p className="text-[10px] text-green-100 uppercase tracking-widest font-bold mb-2 flex items-center gap-1"><Sparkles size={12}/> Autocompletar Receta:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {RECETAS_PREDEFINIDAS.map((receta, index) => (
+                      <button 
+                        key={index}
+                        onClick={() => agregarRecetaRapida(receta.texto)}
+                        className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors border border-white/10 active:scale-95"
+                      >
+                        + {receta.nombre}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <textarea 
                   value={protocolo} 
                   spellCheck="true" 
@@ -392,15 +582,146 @@ function ConsultaContent() {
           </div>
         )}
 
+        {/* --- PESTAÑA COSMOBIOLOGÍA CON ESPACIO PARA LA IA --- */}
         {tabActiva === 'astro' && (
-           <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-           <div className="bg-white rounded-[3rem] p-10 shadow-sm border border-gray-100 text-center min-h-[400px] flex flex-col items-center justify-center">
-             <div className="w-64 h-64 border-4 border-dashed border-gray-100 rounded-full flex items-center justify-center relative">
-               <Sparkles size={48} className="text-gray-100 animate-pulse" />
-               <p className="absolute -bottom-10 text-xs font-black text-gray-300 uppercase tracking-[0.3em]">Preparando Motor Radix...</p>
-             </div>
-           </div>
-         </div>
+          <div className="space-y-6 animate-in fade-in duration-500">
+            
+            {/* Barra superior (Rectificación) */}
+            <div className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4 max-w-5xl mx-auto">
+              <div className="flex items-center gap-2">
+                <Clock className="text-[#0B5D34]" size={20}/>
+                <span className="font-bold text-gray-700 text-sm">Rectificación de Carta</span>
+              </div>
+              
+              <div className="flex flex-wrap items-center gap-2 md:gap-4 bg-gray-50 p-2 rounded-2xl border border-gray-200 justify-center">
+                <div className="flex flex-col items-center px-3 border-r border-gray-200">
+                  <span className="text-[9px] uppercase font-bold text-gray-400 mb-1">Días</span>
+                  <div className="flex items-center gap-2 md:gap-3">
+                    <button onClick={() => modificarTiempo('dia', -1)} className="text-red-500 font-bold text-lg hover:scale-110">-</button>
+                    <span className="text-xs font-black text-gray-700 w-16 text-center">{fechaRect}</span>
+                    <button onClick={() => modificarTiempo('dia', 1)} className="text-[#0B5D34] font-bold text-lg hover:scale-110">+</button>
+                  </div>
+                </div>
+                <div className="flex flex-col items-center px-3 border-r border-gray-200">
+                  <span className="text-[9px] uppercase font-bold text-gray-400 mb-1">Horas</span>
+                  <div className="flex items-center gap-2 md:gap-3">
+                    <button onClick={() => modificarTiempo('hora', -1)} className="text-red-500 font-bold text-lg hover:scale-110">-</button>
+                    <span className="text-xs font-black text-gray-700 w-6 text-center">{horaRect.split(':')[0]}</span>
+                    <button onClick={() => modificarTiempo('hora', 1)} className="text-[#0B5D34] font-bold text-lg hover:scale-110">+</button>
+                  </div>
+                </div>
+                <div className="flex flex-col items-center px-3 border-r border-gray-200">
+                  <span className="text-[9px] uppercase font-bold text-gray-400 mb-1">Mins</span>
+                  <div className="flex items-center gap-2 md:gap-3">
+                    <button onClick={() => modificarTiempo('minuto', -5)} className="text-red-500 font-bold text-lg hover:scale-110">-</button>
+                    <span className="text-xs font-black text-gray-700 w-6 text-center">{horaRect.split(':')[1]?.split(' ')[0] || '00'}</span>
+                    <button onClick={() => modificarTiempo('minuto', 5)} className="text-[#0B5D34] font-bold text-lg hover:scale-110">+</button>
+                  </div>
+                </div>
+                
+                {/* BOTÓN INTERACTIVO PARA AM/PM */}
+                <button 
+                  onClick={toggleAMPM}
+                  className="px-4 py-1 hover:bg-green-100 rounded-lg transition-all active:scale-95 border-r border-gray-200"
+                >
+                   <span className="text-xs font-black text-[#0B5D34]">{horaRect.split(' ')[1] || ''}</span>
+                </button>
+                
+                {/* CAMPOS DE LAT Y LON RE-INSERTADOS */}
+                <div className="flex flex-col items-center px-3 border-r border-gray-200">
+                  <span className="text-[9px] uppercase font-bold text-gray-400 mb-1">Lat</span>
+                  <input type="text" value={latitudRect} onChange={(e) => setLatitudRect(e.target.value)} className="text-xs font-black text-gray-700 w-12 text-center bg-transparent border-b border-gray-300 outline-none" />
+                </div>
+                <div className="flex flex-col items-center px-3">
+                  <span className="text-[9px] uppercase font-bold text-gray-400 mb-1">Lon</span>
+                  <input type="text" value={longitudRect} onChange={(e) => setLongitudRect(e.target.value)} className="text-xs font-black text-gray-700 w-14 text-center bg-transparent border-b border-gray-300 outline-none" />
+                </div>
+              </div>
+
+              <button onClick={cargarRadix} className="w-full md:w-auto px-6 py-3 bg-[#0B5D34] text-white rounded-xl font-bold shadow-md active:scale-95 flex items-center justify-center gap-2 text-sm">
+                 {cargandoRadix ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16}/>}
+                 Recalcular
+              </button>
+            </div>
+
+            {/* Layout de 3 columnas para la Carta Astral */}
+            <div className="bg-white rounded-[3rem] p-4 md:p-8 shadow-sm border border-gray-100 min-h-[500px]">
+              {!datosRadix ? (
+                <div className="text-center space-y-6 py-20">
+                  <Sparkles size={48} className="mx-auto text-gray-300" />
+                  <p className="text-gray-400 font-medium uppercase tracking-[0.2em] px-4">Verifica la hora y presiona Recalcular</p>
+                </div>
+              ) : (
+                <div className="w-full flex flex-col lg:flex-row gap-8 items-start justify-center">
+                  
+                  {/* COLUMNA IZQUIERDA: ASISTENTE IA */}
+                  <div className="w-full lg:w-[400px] bg-gradient-to-b from-blue-50 to-white p-6 rounded-3xl border border-blue-100 shadow-inner flex flex-col" style={{ minHeight: '600px', maxHeight: '800px' }}>
+                    <div className="flex items-center justify-between mb-4 border-b border-blue-200 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-md">
+                          <Bot size={20} />
+                        </div>
+                        <div>
+                          <h3 className="font-black text-blue-900 leading-none">Valentina</h3>
+                          <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mt-1">Cosmobiología Clínica</p>
+                        </div>
+                      </div>
+                      
+                      <button 
+                        onClick={analizarConValentina}
+                        disabled={cargandoIA}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-bold py-2 px-4 rounded-xl shadow-md transition-all text-xs flex justify-center items-center gap-2"
+                      >
+                        {cargandoIA ? <Loader2 size={14} className="animate-spin"/> : <Activity size={14}/>}
+                        {cargandoIA ? "Analizando..." : "Analizar Caso"}
+                      </button>
+                    </div>
+                    
+                    {/* ZONA DONDE APARECE EL REPORTE */}
+                    <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                      {analisisIA ? (
+                        <div dangerouslySetInnerHTML={{ __html: analisisIA.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                      ) : cargandoIA ? (
+                        <div className="flex flex-col items-center justify-center h-full text-blue-400 space-y-4 opacity-70">
+                          <Bot size={48} className="animate-bounce" />
+                          <p className="text-xs font-bold uppercase tracking-widest text-center">Calculando vulnerabilidades<br/>y tránsitos...</p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
+                          <Sparkles size={48} className="opacity-20" />
+                          <p className="text-center text-xs font-medium px-4">Presiona "Analizar Caso" para que Valentina genere el reporte cosmobiológico.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* COLUMNA CENTRAL: RADIX */}
+                  <div className="flex-1 flex justify-center w-full min-w-[300px]">
+                    <RadixChart data={datosRadix} />
+                  </div>
+
+                  {/* COLUMNA DERECHA: POSICIONES */}
+                  <div className="w-full lg:w-[280px] bg-gray-50 p-6 rounded-3xl border border-gray-100">
+                    <h3 className="font-bold text-[#0B5D34] uppercase text-[10px] tracking-widest border-b border-gray-200 pb-2 mb-4">Posiciones Exactas</h3>
+                    <div className="grid gap-2">
+                      {datosRadix.posiciones.map((p: any, i: number) => (
+                        <div key={i} className="flex justify-between items-center text-xs border-b border-gray-100 pb-1.5">
+                          <span className="font-bold text-gray-700 flex items-center gap-2">
+                            <span className="text-lg text-[#0B5D34]">{PLANETA_ICONS[p.nombre]}</span> {p.nombre}
+                          </span>
+                          <span className="text-gray-500 font-black bg-white px-2 py-1 rounded shadow-sm border border-gray-100">
+                            {Math.floor(p.grados)}° {SIGNO_ICONS[p.signo]}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[9px] font-bold text-gray-400 text-center mt-6 uppercase tracking-widest">Sistema: Casas Iguales</p>
+                  </div>
+
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
       </main>

@@ -2,264 +2,272 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Search, Calendar, Clock, ChevronRight, Activity, Users, Loader2, CheckCircle2, DollarSign, TrendingUp, AlertTriangle, Wallet, HeartHandshake } from 'lucide-react';
+import { 
+  Search, Calendar, TrendingUp, AlertTriangle, 
+  HeartHandshake, DollarSign, Clock, Activity, Loader2, ChevronRight
+} from 'lucide-react';
 
-export default function PanelEspecialista() {
+export default function Panel() {
   const router = useRouter();
-  const [pacientes, setPacientes] = useState<any[]>([]);
-  const [busqueda, setBusqueda] = useState('');
+  const [pacientesHoy, setPacientesHoy] = useState<any[]>([]);
+  const [cuentasPorCobrar, setCuentasPorCobrar] = useState<any[]>([]);
+  const [todosLosPacientes, setTodosLosPacientes] = useState<any[]>([]); // Para el buscador
+  const [resultadosBusqueda, setResultadosBusqueda] = useState<any[]>([]); // Para el menú desplegable
   const [cargando, setCargando] = useState(true);
+  const [busqueda, setBusqueda] = useState('');
+  
+  const [finanzas, setFinanzas] = useState({
+    hoy: 0,
+    semana: 0,
+    mes: 0,
+    ano: 0,
+    donacionesMes: 0,
+    donacionesAno: 0
+  });
 
-  const hoy = new Date();
-  const diaHoy = String(hoy.getDate()).padStart(2, '0');
-  const mesHoy = String(hoy.getMonth() + 1).padStart(2, '0');
-  const anioHoy = hoy.getFullYear();
-  const fechaHoyStr = `${diaHoy}/${mesHoy}/${anioHoy}`;
-  const mesAnioActualStr = `${mesHoy}/${anioHoy}`; 
+  const fechaHoyHeader = new Date().toLocaleDateString('es-VE', { 
+    weekday: 'long', day: 'numeric', month: 'long' 
+  });
+  const fechaHeaderCapitalizada = fechaHoyHeader.charAt(0).toUpperCase() + fechaHoyHeader.slice(1);
 
   useEffect(() => {
-    const cargarPacientes = async () => {
+    const cargarDatos = async () => {
       setCargando(true);
-      const { data, error } = await supabase
-        .from('historias_clinicas')
-        .select('id, nombre_completo, telefono, proxima_cita, enfoque_actual, historial_consultas, saldo_pendiente')
-        .order('proxima_cita', { ascending: true });
+      const { data: pacientes } = await supabase.from('historias_clinicas').select('*');
+      
+      if (pacientes) {
+        setTodosLosPacientes(pacientes); // Guardamos todos para buscar rápido
 
-      if (!error && data) {
-        setPacientes(data);
+        const hoy = new Date();
+        const dHoy = hoy.getDate();
+        const mHoy = hoy.getMonth();
+        const yHoy = hoy.getFullYear();
+
+        const diaSemana = hoy.getDay() === 0 ? 6 : hoy.getDay() - 1;
+        const inicioSemana = new Date(yHoy, mHoy, dHoy - diaSemana, 0, 0, 0);
+        const finSemana = new Date(yHoy, mHoy, dHoy - diaSemana + 6, 23, 59, 59);
+
+        let ingHoy = 0, ingSem = 0, ingMes = 0, ingAno = 0;
+        let donMes = 0, donAno = 0;
+        const agendaHoy: any[] = [];
+        const deudores: any[] = [];
+
+        pacientes.forEach(p => {
+          if (p.saldo_pendiente > 0) deudores.push(p);
+
+          const hoyStr = `${String(dHoy).padStart(2, '0')}/${String(mHoy + 1).padStart(2, '0')}/${yHoy}`;
+          if (p.proxima_cita && p.proxima_cita.includes(hoyStr)) {
+            const hora = p.proxima_cita.split(' a las ')[1] || 'Sin hora';
+            agendaHoy.push({ ...p, hora_cita_corta: hora });
+          }
+
+          if (p.historial_consultas && Array.isArray(p.historial_consultas)) {
+            p.historial_consultas.forEach((visita: any) => {
+              if (!visita.fecha || !visita.finanzas) return;
+              
+              const match = visita.fecha.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/) || visita.fecha.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+              if (!match) return;
+
+              let vD, vM, vY;
+              if (match[3].length === 4) { 
+                vD = parseInt(match[1]); vM = parseInt(match[2]) - 1; vY = parseInt(match[3]);
+              } else { 
+                vY = parseInt(match[1]); vM = parseInt(match[2]) - 1; vD = parseInt(match[3]);
+              }
+
+              const fechaV = new Date(vY, vM, vD);
+              const monto = Number(visita.finanzas.pagado) || 0;
+              const esDonacion = visita.finanzas.tipoPago === 'Donacion';
+              const valorDonado = esDonacion ? (Number(visita.finanzas.costo) || 0) : 0;
+
+              if (vD === dHoy && vM === mHoy && vY === yHoy) ingHoy += monto;
+              if (fechaV >= inicioSemana && fechaV <= finSemana) ingSem += monto;
+              if (vM === mHoy && vY === yHoy) { ingMes += monto; donMes += valorDonado; }
+              if (vY === yHoy) { ingAno += monto; donAno += valorDonado; }
+            });
+          }
+        });
+
+        setPacientesHoy(agendaHoy);
+        setCuentasPorCobrar(deudores);
+        setFinanzas({ hoy: ingHoy, semana: ingSem, mes: ingMes, ano: ingAno, donacionesMes: donMes, donacionesAno: donAno });
       }
       setCargando(false);
     };
-    cargarPacientes();
+    cargarDatos();
   }, []);
 
-  const pacientesFiltrados = pacientes.filter(p => 
-    p.nombre_completo.toLowerCase().includes(busqueda.toLowerCase()) ||
-    (p.telefono && p.telefono.includes(busqueda))
-  );
-
-  const citasHoy = pacientes.filter(p => p.proxima_cita && p.proxima_cita.startsWith(fechaHoyStr));
-  
-  // 🧮 LÓGICA DE CÁLCULO DE FECHAS (Semana actual)
-  const inicioSemana = new Date(hoy);
-  const diaSemana = inicioSemana.getDay();
-  const diff = inicioSemana.getDate() - diaSemana + (diaSemana === 0 ? -6 : 1); 
-  inicioSemana.setDate(diff);
-  inicioSemana.setHours(0,0,0,0);
-
-  // 🧮 MOTOR FINANCIERO Y ESTADÍSTICO
-  let ingresosHoy = 0;
-  let ingresosSemana = 0;
-  let ingresosMes = 0;
-  let donacionesMes = 0;
-  let deudores = [] as any[];
-
-  pacientes.forEach(p => {
-    if (parseFloat(p.saldo_pendiente) > 0) {
-      deudores.push(p);
+  // LÓGICA DEL BUSCADOR EN VIVO
+  const manejarBusqueda = (texto: string) => {
+    setBusqueda(texto);
+    if (texto.length > 1) {
+      const filtrados = todosLosPacientes.filter(p => 
+        p.nombre_completo?.toLowerCase().includes(texto.toLowerCase())
+      );
+      setResultadosBusqueda(filtrados);
+    } else {
+      setResultadosBusqueda([]);
     }
-
-    if (p.historial_consultas && Array.isArray(p.historial_consultas)) {
-      p.historial_consultas.forEach((visita: any) => {
-        if (visita.finanzas) {
-          const pago = parseFloat(visita.finanzas.pagado) || 0;
-          const costo = parseFloat(visita.finanzas.costo) || 0;
-          const tipoPago = visita.finanzas.tipoPago;
-          
-          const fechaVisitaStr = visita.fecha.split(',')[0]; 
-          const [dia, mes, anio] = fechaVisitaStr.split('/');
-          const visitaDate = new Date(Number(anio), Number(mes) - 1, Number(dia));
-
-          const esHoy = fechaVisitaStr === fechaHoyStr;
-          const esMes = fechaVisitaStr.includes(mesAnioActualStr);
-          const esSemana = visitaDate >= inicioSemana && visitaDate <= hoy;
-
-          if (tipoPago === 'Donacion') {
-            if (esMes) donacionesMes += costo;
-          } else {
-            if (esHoy) ingresosHoy += pago;
-            if (esSemana) ingresosSemana += pago;
-            if (esMes) ingresosMes += pago;
-          }
-        }
-      });
-    }
-  });
-
-  const abrirExpediente = (nombre: string, telefono: string) => {
-    router.push(`/consulta?nombre=${encodeURIComponent(nombre)}&telefono=${encodeURIComponent(telefono || '')}`);
   };
 
+  const irAConsulta = (nombre: string) => {
+    setBusqueda('');
+    setResultadosBusqueda([]);
+    router.push(`/consulta?nombre=${encodeURIComponent(nombre)}`);
+  };
+
+  const meses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  const mesAct = meses[new Date().getMonth()].toUpperCase();
+  const anoAct = new Date().getFullYear();
+
+  if (cargando) {
+    return <div className="min-h-screen flex items-center justify-center bg-[#F1F5F9]"><Loader2 size={40} className="text-[#0B5D34] animate-spin" /></div>;
+  }
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-[#1F2937]">
-      
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 md:px-8 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-[#F1F5F9] font-sans pb-20">
+      <header className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-40 shadow-sm">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#0B5D34] rounded-lg flex items-center justify-center text-white shadow-md">
-              <Activity size={20} />
-            </div>
+            <div className="w-10 h-10 bg-[#0B5D34] rounded-xl flex items-center justify-center text-white shadow-sm"><Activity size={20} /></div>
             <div>
-              <h1 className="font-bold text-lg leading-none text-gray-800">Centro de Mando</h1>
-              <p className="text-xs text-gray-500 font-medium mt-0.5">Miguel Espinoza • Naturópata</p>
+              <h1 className="font-black text-gray-800 text-lg leading-tight">Centro de Mando</h1>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Miguel Espinoza • Naturópata</p>
             </div>
           </div>
-          <div className="text-right hidden md:block">
-            <p className="text-sm font-bold text-[#0B5D34] capitalize">
-              {hoy.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </p>
+          <div className="text-[#0B5D34] font-bold text-[11px] bg-green-50 px-4 py-2 rounded-full border border-green-100 uppercase tracking-widest">
+            {fechaHeaderCapitalizada}
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 md:px-8 mt-6 md:mt-8 space-y-8 animate-in fade-in duration-500">
+      <main className="max-w-6xl mx-auto p-4 md:p-6 mt-2 space-y-6">
         
-        <div className="relative">
-          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-            <Search className="text-gray-400" size={20} />
+        {/* BUSCADOR CON MENÚ DESPLEGABLE */}
+        <div className="relative z-50">
+          <div className="bg-white p-1 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-3 focus-within:border-[#0B5D34] focus-within:ring-2 focus-within:ring-green-50 transition-all">
+            <div className="pl-4 text-[#0B5D34]"><Search size={20} /></div>
+            <input 
+              type="text" 
+              placeholder="Buscar paciente por nombre..." 
+              className="w-full bg-transparent outline-none py-3 text-gray-700 font-medium placeholder-gray-400" 
+              value={busqueda} 
+              onChange={(e) => manejarBusqueda(e.target.value)} 
+              onKeyDown={(e) => e.key === 'Enter' && busqueda && irAConsulta(busqueda)} 
+            />
           </div>
-          <input
-            type="text"
-            placeholder="Buscar paciente para consulta o cobro..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="w-full bg-white border-2 border-gray-200 rounded-2xl py-4 pl-12 pr-4 text-gray-800 font-medium outline-none focus:border-[#0B5D34] focus:ring-4 focus:ring-[#0B5D34]/10 transition-all shadow-sm"
-          />
+          
+          {/* Resultados en vivo */}
+          {resultadosBusqueda.length > 0 && (
+            <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-2xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto z-50 animate-in fade-in slide-in-from-top-2">
+              {resultadosBusqueda.map((p, i) => (
+                <button 
+                  key={i} 
+                  onClick={() => irAConsulta(p.nombre_completo)} 
+                  className="w-full text-left px-6 py-4 border-b border-gray-50 hover:bg-green-50 flex items-center justify-between group transition-colors"
+                >
+                  <div>
+                    <p className="font-bold text-gray-800 group-hover:text-[#0B5D34]">{p.nombre_completo}</p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Tel: {p.telefono || 'Sin registro'}</p>
+                  </div>
+                  <ChevronRight size={16} className="text-gray-300 group-hover:text-[#0B5D34]" />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {cargando ? (
-          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-            <Loader2 className="animate-spin mb-4 text-[#0B5D34]" size={32} />
-            <p className="font-medium text-sm">Calculando finanzas y sincronizando citas...</p>
-          </div>
-        ) : busqueda !== '' ? (
-          <div className="space-y-3">
-            <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Users size={16} /> Resultados de búsqueda
-            </h2>
-            {pacientesFiltrados.length > 0 ? (
-              pacientesFiltrados.map((p, i) => (
-                <button key={i} onClick={() => abrirExpediente(p.nombre_completo, p.telefono)} className="w-full text-left bg-white p-4 rounded-2xl border border-gray-100 hover:border-[#0B5D34]/50 hover:shadow-md transition-all flex items-center justify-between group active:scale-[0.99]">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center text-gray-500 font-bold border border-gray-100">
-                      {p.nombre_completo.charAt(0)}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-gray-800">{p.nombre_completo}</h3>
-                      <p className="text-xs text-gray-500 mt-0.5">{p.telefono || 'Sin teléfono'}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {parseFloat(p.saldo_pendiente) > 0 && <span className="text-[10px] bg-red-100 text-red-700 font-black px-2 py-1 rounded-md">DEUDA: ${p.saldo_pendiente}</span>}
-                    <ChevronRight className="text-gray-300 group-hover:text-[#0B5D34] transition-colors" />
-                  </div>
-                </button>
-              ))
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* COLUMNA PACIENTES (Izquierda) */}
+          <div className="lg:col-span-2 space-y-4">
+            <h2 className="text-xs font-black text-[#0B5D34] uppercase tracking-widest flex items-center gap-2"><Calendar size={16} /> Pacientes de Hoy</h2>
+            {pacientesHoy.length === 0 ? (
+              <div className="bg-white rounded-3xl p-8 text-center border border-gray-100 border-dashed">
+                <p className="text-gray-400 font-medium">No hay pacientes en agenda para el día de hoy.</p>
+              </div>
             ) : (
-              <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
-                <p className="text-gray-500 font-medium">No se encontraron pacientes.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {pacientesHoy.map((p, i) => (
+                  <button key={i} onClick={() => irAConsulta(p.nombre_completo)} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 hover:border-[#0B5D34]/50 hover:shadow-md transition-all text-left">
+                    <div className="text-[10px] font-black text-[#0B5D34] bg-green-50 px-2 py-1 rounded-md inline-block mb-3"><Clock size={10} className="inline mr-1"/> {p.hora_cita_corta}</div>
+                    <h3 className="font-bold text-gray-800 text-lg leading-tight mb-1">{p.nombre_completo}</h3>
+                    <p className="text-xs text-gray-500 line-clamp-1"><Activity size={12} className="inline opacity-50 mr-1"/> {p.enfoque_actual || 'Evaluación General'}</p>
+                  </button>
+                ))}
               </div>
             )}
           </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            <div className="lg:col-span-2 space-y-8">
-              <div>
-                <h2 className="text-sm font-black text-[#0B5D34] uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <Calendar size={16} /> Pacientes de Hoy
-                </h2>
-                
-                {citasHoy.length > 0 ? (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {citasHoy.map((p, i) => (
-                      <button key={i} onClick={() => abrirExpediente(p.nombre_completo, p.telefono)} className="w-full text-left bg-white p-5 rounded-2xl border-2 border-[#0B5D34]/10 hover:border-[#0B5D34] hover:shadow-lg transition-all relative overflow-hidden group active:scale-[0.99]">
-                        <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform"></div>
-                        <div className="flex justify-between items-start mb-3">
-                          <div className="flex items-center gap-2 text-[#0B5D34] bg-green-50 px-2 py-1 rounded-md">
-                            <Clock size={14} />
-                            <span className="text-xs font-black">{p.proxima_cita.split(' a las ')[1]}</span>
-                          </div>
-                        </div>
-                        <h3 className="font-bold text-lg text-gray-800">{p.nombre_completo}</h3>
-                        <p className="text-xs font-medium text-gray-500 mt-1 line-clamp-1">{p.enfoque_actual || 'Evaluación General'}</p>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="bg-white p-8 rounded-2xl border border-gray-100 text-center shadow-sm">
-                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <CheckCircle2 className="text-green-400" size={32} />
-                    </div>
-                    <p className="font-bold text-gray-700">No hay citas programadas para hoy.</p>
-                  </div>
-                )}
-              </div>
-            </div>
 
-            <div className="space-y-6">
+          {/* COLUMNA FINANZAS (Derecha) */}
+          <div className="space-y-6">
+            
+            {/* TARJETA FINANCIERA COMPACTA Y ELEGANTE */}
+            <div className="bg-gradient-to-br from-[#0f172a] to-[#1e293b] rounded-3xl p-6 shadow-xl text-white relative overflow-hidden">
+              <DollarSign size={100} className="absolute -right-6 -bottom-6 opacity-10 text-green-400" />
+              <h2 className="text-[10px] font-black text-green-400 uppercase tracking-widest flex items-center gap-2 mb-6 opacity-90"><TrendingUp size={14} /> Reporte de Ingresos</h2>
               
-              <div className="bg-gray-900 rounded-[2rem] p-6 text-white shadow-xl relative overflow-hidden">
-                <div className="absolute -right-6 -top-6 text-white/5 rotate-12"><Wallet size={120}/></div>
-                <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6 relative z-10 flex items-center gap-2">
-                  <TrendingUp size={14} className="text-green-400"/> Resumen Financiero
-                </h2>
+              <div className="space-y-5 relative z-10">
                 
-                <div className="space-y-4 relative z-10">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Ingresos Hoy</p>
-                      <p className="text-2xl font-black text-white flex items-center gap-1"><DollarSign size={20} className="text-green-400"/>{ingresosHoy.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Esta Semana</p>
-                      <p className="text-2xl font-black text-white flex items-center gap-1"><DollarSign size={20} className="text-green-400"/>{ingresosSemana.toFixed(2)}</p>
-                    </div>
+                {/* Hoy y Semana */}
+                <div className="grid grid-cols-2 gap-4 border-b border-white/10 pb-4">
+                  <div>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hoy</p>
+                    <p className="text-2xl font-black text-green-400">${finanzas.hoy.toFixed(2)}</p>
                   </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-700/50">
-                    <div>
-                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Mes ({hoy.toLocaleString('es-ES', { month: 'short' })})</p>
-                      <p className="text-xl font-black text-gray-200 flex items-center gap-1"><DollarSign size={18} className="text-gray-400"/>{ingresosMes.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">Donaciones (Mes)</p>
-                      <p className="text-xl font-black text-purple-300 flex items-center gap-1"><HeartHandshake size={18} className="text-purple-400"/>{donacionesMes.toFixed(2)}</p>
-                    </div>
+                  <div>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Semana</p>
+                    <p className="text-2xl font-black text-white">${finanzas.semana.toFixed(2)}</p>
                   </div>
                 </div>
-              </div>
 
-              <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100">
-                <h2 className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <AlertTriangle size={14}/> Cuentas por Cobrar ({deudores.length})
-                </h2>
-                
-                {deudores.length > 0 ? (
-                  <div className="space-y-3">
-                    {deudores.map((d, i) => (
-                      <button key={i} onClick={() => abrirExpediente(d.nombre_completo, d.telefono)} className="w-full text-left bg-red-50/50 p-3 rounded-xl border border-red-100 hover:bg-red-50 transition-all flex items-center justify-between group active:scale-[0.98]">
-                        <div className="overflow-hidden">
-                          <p className="font-bold text-xs text-gray-800 truncate">{d.nombre_completo}</p>
-                          <p className="text-[10px] text-gray-500 mt-0.5 truncate">Tel: {d.telefono || 'N/A'}</p>
-                        </div>
-                        <span className="font-black text-red-600 text-sm bg-white px-2 py-1 rounded-md shadow-sm border border-red-100">${d.saldo_pendiente}</span>
-                      </button>
-                    ))}
+                {/* Mes y Año */}
+                <div className="grid grid-cols-2 gap-4 border-b border-white/10 pb-4">
+                  <div>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Mes ({mesAct})</p>
+                    <p className="text-lg font-bold text-white">${finanzas.mes.toFixed(2)}</p>
                   </div>
-                ) : (
-                  <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                    <CheckCircle2 size={24} className="mx-auto text-green-400 mb-2" />
-                    <p className="text-xs font-bold text-gray-500">Cartera sana</p>
-                    <p className="text-[10px] text-gray-400 mt-1">Nadie tiene deudas pendientes.</p>
+                  <div>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Año ({anoAct})</p>
+                    <p className="text-lg font-bold text-blue-300">${finanzas.ano.toFixed(2)}</p>
                   </div>
-                )}
-              </div>
+                </div>
 
+                {/* Donaciones */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[9px] font-bold text-purple-400/80 uppercase tracking-widest mb-1">Donado Mes</p>
+                    <p className="text-sm font-bold text-purple-300 flex items-center gap-1"><HeartHandshake size={12}/> ${finanzas.donacionesMes.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold text-purple-400/80 uppercase tracking-widest mb-1">Donado Año</p>
+                    <p className="text-sm font-bold text-purple-300 flex items-center gap-1"><HeartHandshake size={12}/> ${finanzas.donacionesAno.toFixed(2)}</p>
+                  </div>
+                </div>
+
+              </div>
             </div>
 
+            {/* CUENTAS POR COBRAR */}
+            <div className="bg-red-50 p-5 rounded-3xl border border-red-100 shadow-sm">
+              <h2 className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-2 mb-4"><AlertTriangle size={14} /> Por Cobrar ({cuentasPorCobrar.length})</h2>
+              {cuentasPorCobrar.length === 0 ? (
+                <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">No hay deudas pendientes.</p>
+              ) : (
+                <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                  {cuentasPorCobrar.map((p, i) => (
+                    <button key={i} onClick={() => irAConsulta(p.nombre_completo)} className="w-full flex justify-between items-center bg-white p-3 rounded-xl border border-red-100 shadow-sm hover:border-red-300 transition-colors text-left group">
+                      <div className="truncate pr-2">
+                        <p className="text-xs font-bold text-gray-800 group-hover:text-red-600 truncate">{p.nombre_completo}</p>
+                      </div>
+                      <span className="bg-red-100 text-red-700 text-[11px] font-black px-2 py-1 rounded-md shrink-0">${p.saldo_pendiente}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        )}
+        </div>
       </main>
     </div>
   );
